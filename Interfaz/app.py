@@ -127,6 +127,17 @@ def _try_import(nombre_humano, opciones):
       "ZOOM_MIN", "ZOOM_MAX", "ZOOM_DEFAULT"]),
 ])
 
+(_aplicar_ocr, _paginas_sin_texto, ErrorOCR,
+ ResumenOCR, _info_motor_ocr, IDIOMAS_OCR) = _try_import("motor de OCR", [
+    ("from Motores.OCR import aplicar_ocr, paginas_sin_texto, ErrorOCR, "
+     "ResumenOCR, info_motor_ocr, IDIOMAS_DISPONIBLES",
+     ["aplicar_ocr", "paginas_sin_texto", "ErrorOCR",
+      "ResumenOCR", "info_motor_ocr", "IDIOMAS_DISPONIBLES"]),
+    ("from Motores.OCR.pdf_ocr import aplicar_ocr, paginas_sin_texto, "
+     "ErrorOCR, ResumenOCR, info_motor_ocr, IDIOMAS_DISPONIBLES",
+     ["aplicar_ocr", "paginas_sin_texto", "ErrorOCR",
+      "ResumenOCR", "info_motor_ocr", "IDIOMAS_DISPONIBLES"]),
+])
 
 # ═══════════════════════════════════════════════════════════════
 #  PALETA — Enterprise
@@ -239,10 +250,14 @@ MODULOS = (
            "#F59E0B", "Procesamiento"),
     Modulo("compresor",  "◆", "Comprimir",  "Reduce el tamaño de tus PDFs",
            "#3B82F6", "Procesamiento"),
+    Modulo("ocr",        "⬢", "OCR",        "Añade capa de texto a PDFs escaneados",
+           "#8B5CF6", "Procesamiento"),
     Modulo("visor",      "◉", "Visor",      "Explora cualquier PDF",
            "#EC4899", "Herramientas"),
     Modulo("firmar",     "✎", "Firmar",     "Aplica firma o sello",
            "#9C27B0", "Herramientas"),
+    Modulo("asistente",  "✦", "Asistente",  "Chat de ayuda sobre CCpdf IA",
+           "#F59E0B", "Inteligencia"),
 )
 
 MODULO_POR_CLAVE = {m.clave: m for m in MODULOS}
@@ -638,8 +653,10 @@ class CCPdfApp(ctk.CTk):
         self._vistas["fusionador"] = self._vista_fusionador()
         self._vistas["divisor"]    = self._vista_divisor()
         self._vistas["compresor"]  = self._vista_compresor()
+        self._vistas["ocr"]        = self._vista_ocr()
         self._vistas["visor"]      = self._vista_visor()
         self._vistas["firmar"]     = self._vista_placeholder(MODULO_POR_CLAVE["firmar"])
+        self._vistas["asistente"]  = self._vista_asistente()
 
     # ═══════════════════════════════════════════════════════════
     #  VISTA: DASHBOARD
@@ -748,6 +765,224 @@ class CCPdfApp(ctk.CTk):
         self.visor = VisorPDF(frame)
         self.visor.pack(fill="both", expand=True, padx=12, pady=12)
         return frame
+
+    # ═══════════════════════════════════════════════════════════
+    #  VISTA: OCR
+    # ═══════════════════════════════════════════════════════════
+    def _vista_ocr(self):
+        scroll, interior = self._scroll_view()
+        self._cabecera_modulo(interior, MODULO_POR_CLAVE["ocr"])
+        _, col_izq, col_der = self._layout_2col(interior)
+
+        card = Card(col_izq)
+        card.pack(fill="x")
+        SectionTitle(card, "Archivos de entrada",
+                     "Selecciona los PDFs escaneados a los que aplicarles OCR."
+                     ).pack(anchor="w", padx=22, pady=(20, 14))
+
+        barra = ctk.CTkFrame(card, fg_color="transparent")
+        barra.pack(fill="x", padx=22, pady=(0, 10))
+        Btn(barra, "Añadir PDFs", icono="+", tipo="secondary", ancho=140,
+            comando=self._ocr_add_pdfs).pack(side="left", padx=(0, 6))
+        Btn(barra, "Añadir carpeta", icono="📁", tipo="secondary", ancho=160,
+            comando=self._ocr_add_carpeta).pack(side="left", padx=6)
+        Btn(barra, "Quitar", icono="🗑", tipo="danger", ancho=100,
+            comando=self._ocr_quitar).pack(side="left", padx=6)
+
+        self._ocr_listbox = tk.Listbox(
+            card, selectmode=tk.EXTENDED, activestyle="none",
+            bg=P.CARD_ALT, fg=P.TXT, selectbackground=P.ACCENT,
+            selectforeground=P.TXT_INV, highlightthickness=1,
+            highlightbackground=P.BORDER, highlightcolor=P.ACCENT,
+            borderwidth=0, relief="flat", font=("Segoe UI", 10), height=8)
+        self._ocr_listbox.pack(fill="both", expand=True, padx=22, pady=(0, 8))
+
+        self.lbl_ocr_count = ctk.CTkLabel(card, text="0 archivos en la lista.",
+                                          text_color=P.TXT_3, font=F(11))
+        self.lbl_ocr_count.pack(anchor="w", padx=26, pady=(0, 16))
+
+        card_opt = Card(col_izq)
+        card_opt.pack(fill="x", pady=(14, 0))
+        SectionTitle(card_opt, "Parámetros",
+                     "Idioma del documento y opciones del OCR."
+                     ).pack(anchor="w", padx=22, pady=(20, 10))
+
+        ctk.CTkLabel(card_opt, text="Idioma", font=F(11, "bold"),
+                     text_color=P.TXT).pack(anchor="w", padx=22, pady=(0, 4))
+        self._ocr_idioma_var = tk.StringVar(value="Español")
+        etiquetas_idiomas = list(IDIOMAS_OCR.values())
+        self._ocr_idioma_menu = ctk.CTkOptionMenu(
+            card_opt, values=etiquetas_idiomas, variable=self._ocr_idioma_var,
+            fg_color=P.CARD_ALT, button_color=P.ACCENT,
+            button_hover_color=P.ACCENT_HOVER, text_color=P.TXT,
+            dropdown_fg_color=P.CARD, dropdown_hover_color=P.CARD_ALT,
+            dropdown_text_color=P.TXT,
+            font=F(11), dropdown_font=F(11),
+            corner_radius=P.R_INPUT, height=36)
+        self._ocr_idioma_menu.pack(fill="x", padx=22, pady=(0, 14))
+
+        self._ocr_chk_cipa = ctk.CTkCheckBox(
+            card_opt, text="Usar CIPA (limpieza con IA)",
+            fg_color=P.ACCENT, hover_color=P.ACCENT_HOVER,
+            text_color=P.TXT, border_color=P.BORDER_STRONG,
+            checkmark_color=P.TXT_INV, font=F(11))
+        self._ocr_chk_cipa.pack(anchor="w", padx=22, pady=3)
+
+        self._ocr_chk_solo_escaneado = ctk.CTkCheckBox(
+            card_opt, text="Solo aplicar a páginas sin texto",
+            fg_color=P.ACCENT, hover_color=P.ACCENT_HOVER,
+            text_color=P.TXT, border_color=P.BORDER_STRONG,
+            checkmark_color=P.TXT_INV, font=F(11))
+        self._ocr_chk_solo_escaneado.select()
+        self._ocr_chk_solo_escaneado.pack(anchor="w", padx=22, pady=3)
+
+        self._ocr_destino = InputField(card_opt, "Carpeta de salida (opcional)",
+                                       "Por defecto junto a cada PDF")
+        self._ocr_destino.pack(fill="x", padx=22, pady=(10, 8))
+        Btn(card_opt, "Explorar", icono="📂", tipo="secondary", ancho=130, height=32,
+            comando=lambda: self._sel_carpeta(self._ocr_destino)
+            ).pack(anchor="w", padx=22, pady=(0, 10))
+
+        self.lbl_ocr_motor_info = ctk.CTkLabel(
+            card_opt, text="", text_color=P.TXT_3, anchor="w",
+            justify="left", wraplength=520, font=F(10))
+        self.lbl_ocr_motor_info.pack(fill="x", padx=22, pady=(0, 18))
+
+        self.btn_run_ocr = Btn(col_izq, "Ejecutar OCR", icono="⬢",
+                               tipo="success", ancho=200, height=44,
+                               comando=self._iniciar_ocr)
+        self.btn_run_ocr.pack(fill="x", pady=(14, 0))
+
+        self.panel_ocr = PanelProgreso(col_der, altura_log=280)
+        self.panel_ocr.pack(fill="both", expand=True)
+        self.panel_ocr.btn_stop.configure(command=self._detener)
+
+        try:
+            self.lbl_ocr_motor_info.configure(text=_info_motor_ocr())
+        except Exception:
+            self.lbl_ocr_motor_info.configure(text="Motor OCR: no disponible")
+
+        return scroll
+
+    # ═══════════════════════════════════════════════════════════
+    #  VISTA: ASISTENTE
+    # ═══════════════════════════════════════════════════════════
+    def _vista_asistente(self):
+        scroll, interior = self._scroll_view()
+        self._cabecera_modulo(interior, MODULO_POR_CLAVE["asistente"])
+
+        card = Card(interior)
+        card.pack(fill="both", expand=True, pady=(22, 0))
+
+        ctk.CTkLabel(card,
+                     text="Pregunta a CIPA sobre cómo usar CCpdf IA",
+                     font=F(12), text_color=P.TXT_2, anchor="w"
+                     ).pack(anchor="w", padx=22, pady=(20, 10))
+
+        self._chat_historial = ctk.CTkTextbox(
+            card, fg_color=P.CARD_ALT, height=400, corner_radius=8,
+            border_width=1, border_color=P.BORDER, text_color=P.TXT,
+            font=F(11), wrap="word")
+        self._chat_historial.pack(fill="both", expand=True, padx=22, pady=(0, 10))
+        self._chat_historial.insert("1.0",
+            "CIPA: ¡Hola! Soy el asistente de CCpdf IA. "
+            "Pregúntame lo que quieras sobre cómo usar la suite.\n\n"
+            "Ejemplos:\n"
+            "  · ¿Cómo divido un PDF por unidad médica?\n"
+            "  · ¿Qué diferencia hay entre el compresor y el OCR?\n"
+            "  · ¿Es seguro usar CCpdf con documentos confidenciales?\n")
+        self._chat_historial.configure(state="disabled")
+
+        fila = ctk.CTkFrame(card, fg_color="transparent")
+        fila.pack(fill="x", padx=22, pady=(0, 20))
+
+        self._chat_entry = ctk.CTkEntry(
+            fila, placeholder_text="Escribe tu pregunta…",
+            height=42, corner_radius=P.R_INPUT,
+            border_color=P.BORDER_STRONG, fg_color=P.CARD,
+            text_color=P.TXT, placeholder_text_color=P.TXT_3, font=F(12))
+        self._chat_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self._chat_entry.bind("<Return>", lambda e: self._chat_enviar())
+
+        self._btn_chat_enviar = Btn(fila, "Enviar", icono="▶", tipo="primary",
+                                    ancho=120, height=42,
+                                    comando=self._chat_enviar)
+        self._btn_chat_enviar.pack(side="right")
+
+        return scroll
+
+    # ═══════════════════════════════════════════════════════════
+    #  HELPERS DEL OCR
+    # ═══════════════════════════════════════════════════════════
+    def _ocr_add_pdfs(self):
+        rutas = filedialog.askopenfilenames(
+            title="Selecciona los PDFs para OCR",
+            filetypes=[("PDF", "*.pdf"), ("Todos", "*.*")])
+        if rutas:
+            self._ocr_add_rutas(rutas)
+
+    def _ocr_add_carpeta(self):
+        carpeta = filedialog.askdirectory(title="Carpeta con PDFs")
+        if not carpeta:
+            return
+        try:
+            pdfs = _listar_pdfs_carpeta(carpeta)
+        except ErrorFusion as e:
+            messagebox.showwarning("Atención", str(e))
+            return
+        if not pdfs:
+            messagebox.showinfo("Sin PDFs", "Esa carpeta no contiene PDFs.")
+            return
+        self._ocr_add_rutas(pdfs)
+
+    def _ocr_add_rutas(self, rutas):
+        if not hasattr(self, "_lista_ocr"):
+            self._lista_ocr = []
+        existentes = {os.path.realpath(p) for p in self._lista_ocr}
+        añadidos = 0
+        for r in rutas:
+            if os.path.realpath(r) in existentes:
+                continue
+            self._lista_ocr.append(r)
+            existentes.add(os.path.realpath(r))
+            añadidos += 1
+        self._ocr_refrescar()
+        if añadidos:
+            self.panel_ocr.escribir_log(f"Añadidos {añadidos} PDF(s).")
+
+    def _ocr_refrescar(self):
+        if not hasattr(self, "_lista_ocr"):
+            self._lista_ocr = []
+        self._ocr_listbox.delete(0, "end")
+        for i, ruta in enumerate(self._lista_ocr, 1):
+            self._ocr_listbox.insert("end", f"{i:>3}.   {os.path.basename(ruta)}")
+        n = len(self._lista_ocr)
+        self.lbl_ocr_count.configure(
+            text=f"{n} archivo{'s' if n != 1 else ''} en la lista.")
+
+    def _ocr_quitar(self):
+        sel = list(self._ocr_listbox.curselection())
+        if not sel:
+            return
+        for i in reversed(sel):
+            del self._lista_ocr[i]
+        self._ocr_refrescar()
+
+    # ═══════════════════════════════════════════════════════════
+    #  HELPERS DEL ASISTENTE
+    # ═══════════════════════════════════════════════════════════
+    def _chat_enviar(self):
+        """Placeholder — se implementa en Fase C2."""
+        messagebox.showinfo("Asistente",
+                            "El chat se conectará con CIPA en la Fase C2.")
+
+    # ═══════════════════════════════════════════════════════════
+    #  ARRANQUE OCR (stub — se completa en Fase B2)
+    # ═══════════════════════════════════════════════════════════
+    def _iniciar_ocr(self):
+        """Placeholder — se implementa en Fase B2."""
+        messagebox.showinfo("OCR",
+                            "La ejecución del OCR se conecta en la Fase B2.")
 
     # ═══════════════════════════════════════════════════════════
     #  Helpers comunes para las vistas
