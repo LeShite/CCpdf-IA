@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════
+#  CCpdf — Archivos que NO deben ir al repositorio
+# ═══════════════════════════════════════════════════════════
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# ─── Entornos virtuales ───
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Cachés de herramientas ───
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+
+# ─── Build / Empaquetado ───
+build/
+dist/
+*.spec.bak
+
+# ─── Config local del usuario (¡CRÍTICO!) ───
+# Cada máquina tiene su propia config.json con tema, idioma y carpetas.
+# Si se sincroniza entre máquinas, se pisan las preferencias.
+config.json
+
+# ─── Salidas generadas por CCpdf ───
+salidas/
+PDFs_Recortados/
+PDFs_Clasificados/
+PDFs_Comprimidos/
+*_unidades/
+_PAGINAS_SIN_ASIGNAR.pdf
+
+# ─── Archivos PDF de prueba (nunca van al repo) ───
+*.pdf
+# Excepción: si algún día quieres versionar un PDF concreto para tests,
+# descomenta la siguiente línea y ponlo en /tests/samples/
+# !tests/samples/*.pdf
+
+# ─── Backups y temporales ───
+*.bak
+*.tmp
+*.temp
+*.log
+*~
+
+# ─── IDEs y editores ───
+.vscode/
+.idea/
+*.swp
+*.swo
+.kate-swp
+*~
+
+# ─── Sistema operativo ───
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Secretos (por si acaso) ───
+.env
+.env.local
+*.key
+*.pem
+.git.viejo.backup/
+
+# ─── CIPA — Modelos IA (se descargan bajo demanda) ───
+*.gguf
+*.safetensors
+*.onnx
+*.pt
+*.pth
+Motores/CIPA/modelos/*.bin
