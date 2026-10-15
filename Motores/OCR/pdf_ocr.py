@@ -29,6 +29,7 @@ from typing import Callable, Optional
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
+from PIL import Image, ImageFilter, ImageOps
 
 try:
     import pytesseract
@@ -83,7 +84,7 @@ MAX_TEXTO_CON_IMAGEN = 80
 
 # Confianza mínima del OCR para incluir una palabra en la capa de texto.
 # 30 = descarta basura (manchas, ruido). Bajo a propósito para no perder datos.
-CONFIANZA_MINIMA = 30
+CONFIANZA_MINIMA = 15
 
 # Capa de texto: 3 = invisible. (Constante para poder cambiarla en pruebas.)
 MODO_RENDER_TEXTO = 3
@@ -95,6 +96,18 @@ ESCALA_H_MAX = 400.0    # % máximo
 # (protege contra "alucinaciones" del modelo).
 CIPA_SIMILITUD_MINIMA = 0.6
 
+# Preprocesado de imagen antes del OCR.
+# El autocontraste normaliza la iluminación; el median reduce ruido.
+PREPROCESAR_IMAGEN = True
+MEDIAN_FILTER_SIZE = 3   # 0 = desactivado; impar: 3, 5...
+AUTOCONTRAST_CUTOFF = 2  # % de píxeles extremos a ignorar
+
+# Modo PSM de Tesseract. 3 = automático (mixto). Alternativas útiles:
+#   3  → Auto (mixto) — default
+#   6  → Bloque único de texto (mejor para documentos uniformes)
+#   11 → Texto disperso (busca en cualquier parte — bueno para tablas)
+#   12 → Texto disperso + OSD
+PSM_DEFECTO = 3
 
 @dataclass
 class ResumenOCR:
@@ -254,18 +267,43 @@ def _ruta_unica(ruta: str, usadas: set) -> str:
     usadas.add(os.path.normcase(candidata))
     return candidata
 
+def _preprocesar_imagen(img):
+    """Aplica mejoras a la imagen antes del OCR.
+
+    - Escala de grises: Tesseract espera L o RGB. L es más rápido.
+    - Autocontraste: normaliza scans con iluminación desigual.
+    - Median filter: elimina ruido de sal (típico en escaneos viejos).
+    """
+    if not PREPROCESAR_IMAGEN:
+        return img
+    try:
+        if img.mode != "L":
+            img = img.convert("L")
+        img = ImageOps.autocontrast(img, cutoff=AUTOCONTRAST_CUTOFF)
+        if MEDIAN_FILTER_SIZE >= 3:
+            size = MEDIAN_FILTER_SIZE if MEDIAN_FILTER_SIZE % 2 == 1 else MEDIAN_FILTER_SIZE + 1
+            img = img.filter(ImageFilter.MedianFilter(size=size))
+    except Exception:
+        return img
+    return img
+
 
 # ═══════════════════════════════════════════════════════════════
 #  OCR POR PÁGINA CON COORDENADAS
 # ═══════════════════════════════════════════════════════════════
-def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
+def _extraer_palabras_con_coords(imagen, idioma: str, psm: int = PSM_DEFECTO) -> list:
     """Devuelve una lista de dicts con texto y coordenadas en píxeles:
         [{"texto": str, "x": int, "y": int, "w": int, "h": int,
           "linea": (bloque, párrafo, línea)}, ...]
+
+    Preprocesa la imagen antes del OCR (escala de grises + autocontraste
+    + reducción de ruido) y permite elegir el modo PSM de Tesseract.
     """
+    img_proc = _preprocesar_imagen(imagen)
+    config = f"--psm {psm}"
     try:
         data = pytesseract.image_to_data(
-            imagen, lang=idioma, output_type=Output.DICT
+            img_proc, lang=idioma, config=config, output_type=Output.DICT
         )
     except TesseractError:
         return []
@@ -296,6 +334,81 @@ def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
         })
     return palabras
 
+def _desrotar_palabras(palabras: list, rot: int,
+                       ancho_orig: int, alto_orig: int) -> list:
+    """Convierte coordenadas del espacio de la imagen ROTADA al original.
+
+    Usa coordenadas CONTINUAS (no índices de píxel). Tesseract devuelve
+    left/top/width/height en un sistema continuo donde la caja abarca
+    [left, left+width] × [top, top+height].
+
+    Convención PIL: rotate(angle) = CCW, expand=True → la imagen crece.
+      - rot=0   → imagen W×H
+      - rot=90  → imagen H×W  (rotación 90° CCW)
+      - rot=180 → imagen W×H
+      - rot=270 → imagen H×W  (rotación 270° CCW = 90° CW)
+    """
+    if rot == 0:
+        return palabras
+
+    resultado = []
+    for p in palabras:
+        x_r, y_r, w_r, h_r = p["x"], p["y"], p["w"], p["h"]
+
+        if rot == 90:
+            # rot=90 CCW: inverse mapping.
+            # forward: (x_o, y_o) → (y_o, W - x_o)
+            x_o = ancho_orig - y_r - h_r
+            y_o = x_r
+            w_o = h_r
+            h_o = w_r
+        elif rot == 180:
+            x_o = ancho_orig - x_r - w_r
+            y_o = alto_orig - y_r - h_r
+            w_o = w_r
+            h_o = h_r
+        elif rot == 270:
+            # rot=270 CCW = 90° CW
+            # forward: (x_o, y_o) → (H - y_o, x_o)
+            # inverse: x_o = y_r, y_o = H - x_r - w_r
+            x_o = y_r
+            y_o = alto_orig - x_r - w_r
+            w_o = h_r
+            h_o = w_r
+        else:
+            x_o, y_o, w_o, h_o = x_r, y_r, w_r, h_r
+
+        resultado.append({**p, "x": x_o, "y": y_o, "w": w_o, "h": h_o})
+    return resultado
+
+
+def _extraer_palabras_con_auto_rotacion(imagen, idioma: str,
+                                        psm: int = PSM_DEFECTO) -> tuple:
+    """Prueba 4 rotaciones, elige la que da MÁS palabras y des-rota las
+    coordenadas al espacio original.
+
+    Devuelve (palabras_en_espacio_original, rotacion_elegida).
+    Si el enfoque falla en las 4, devuelve la rotación 0°.
+    """
+    ancho, alto = imagen.size
+    mejor_palabras: list = []
+    mejor_rot = 0
+    mejor_score = -1
+
+    for rot in (0, 90, 180, 270):
+        try:
+            img_rot = imagen if rot == 0 else imagen.rotate(rot, expand=True)
+            palabras_rot = _extraer_palabras_con_coords(img_rot, idioma, psm=psm)
+        except Exception:
+            continue
+
+        score = len(palabras_rot)
+        if score > mejor_score:
+            mejor_score = score
+            mejor_rot = rot
+            mejor_palabras = _desrotar_palabras(palabras_rot, rot, ancho, alto)
+
+    return mejor_palabras, mejor_rot
 
 # ═══════════════════════════════════════════════════════════════
 #  CIPA: CORRECCIÓN POR LÍNEA
@@ -518,6 +631,7 @@ def aplicar_ocr(
     callback_log: Optional[Callable[[str], None]] = None,
     cancelar: Optional[threading.Event] = None,
     min_caracteres: int = MIN_CARACTERES_POR_PAGINA,
+    psm: int = PSM_DEFECTO,
 ) -> ResumenOCR:
     """Aplica OCR (decidido por página) a los PDFs y genera PDFs buscables."""
     log = callback_log or (lambda m: None)
@@ -603,7 +717,7 @@ def aplicar_ocr(
                         raise RuntimeError(
                             f"no se pudo renderizar la página {idx + 1}")
 
-                    palabras = _extraer_palabras_con_coords(imgs[0], idioma)
+                    palabras = _extraer_palabras_con_coords(imgs[0], idioma, psm=psm)
                     del imgs  # liberar la imagen cuanto antes
 
                     if cipa is not None and palabras:
