@@ -14,7 +14,7 @@ from .base import BackendBase
 # Importación diferida: si el usuario no tiene llama-cpp-python instalado,
 # CIPA debe poder importarse igual (y reportar que no está disponible).
 try:
-    from llama_cpp import Llama
+    from llama_cpp import Llama  # type: ignore[import-not-found]
     HAY_LLAMA_CPP = True
 except ImportError:
     Llama = None

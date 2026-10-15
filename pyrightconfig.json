@@ -1,0 +1,17 @@
+{
+    "include": [
+        "Interfaz",
+        "Motores",
+        "main.py"
+    ],
+    "exclude": [
+        "**/__pycache__",
+        "**/.venv",
+        "**/venv"
+    ],
+    "reportMissingImports": "warning",
+    "reportMissingModuleSource": "none",
+    "pythonVersion": "3.14",
+    "pythonPlatform": "Linux",
+    "typeCheckingMode": "basic"
+}
