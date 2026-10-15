@@ -48,6 +48,12 @@ RUTA_LOGS.mkdir(parents=True, exist_ok=True)
 #  CATÁLOGO DE MODELOS PERMITIDOS
 # ═══════════════════════════════════════════════════════════════
 class InfoModelo(TypedDict, total=False):
+    """Metadatos de un modelo de CIPA.
+
+    `backend_preferido` indica qué runtime usar:
+      - "ollama"    → el modelo se sirve vía Ollama (rápido, recomendado)
+      - "llama_cpp" → el modelo es un .gguf local (fallback)
+    """
     clave: str
     nombre: str
     archivo: str
@@ -56,32 +62,45 @@ class InfoModelo(TypedDict, total=False):
     tamano_mb: int
     descripcion: str
     tareas: list
+    backend_preferido: str
 
 
 # ⚠️ REGLA: todos los modelos deben ser MIT o Apache 2.0
 # para mantener CCpdf IA comercializable sin obligaciones AGPL.
-MODELOS: dict[str, InfoModelo] = {
+MODELOS = {
     "limpieza": {
         "clave": "limpieza",
-        "nombre": "Phi-3.5-mini-instruct",
+        "nombre": "Qwen2.5-3B-instruct (Ollama)",
+        "archivo": "qwen2.5:3b",
+        "url": "ollama://qwen2.5:3b",
+        "licencia": "Apache-2.0",
+        "tamano_mb": 1900,
+        "descripcion": "Limpieza y corrección de texto OCR (rápido en CPU).",
+        "tareas": ["limpiar_ocr", "normalizar_texto"],
+        "backend_preferido": "ollama",
+    },
+    "extraccion": {
+        "clave": "extraccion",
+        "nombre": "Qwen2.5-3B-instruct (Ollama)",
+        "archivo": "qwen2.5:3b",
+        "url": "ollama://qwen2.5:3b",
+        "licencia": "Apache-2.0",
+        "tamano_mb": 1900,
+        "descripcion": "Extracción de campos y clasificación de documentos.",
+        "tareas": ["extraer_campos", "clasificar", "resumir"],
+        "backend_preferido": "ollama",
+    },
+    "limpieza_llama_cpp": {
+        "clave": "limpieza_llama_cpp",
+        "nombre": "Phi-3.5-mini-instruct (llama.cpp)",
         "archivo": "Phi-3.5-mini-instruct-Q4_K_M.gguf",
         "url": "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/"
                "resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
         "licencia": "MIT",
         "tamano_mb": 2400,
-        "descripcion": "Limpieza y corrección de texto OCR.",
-        "tareas": ["limpiar_ocr", "normalizar_texto"],
-    },
-    "extraccion": {
-        "clave": "extraccion",
-        "nombre": "Qwen2.5-1.5B-instruct",
-        "archivo": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
-        "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/"
-               "resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
-        "licencia": "Apache-2.0",
-        "tamano_mb": 1000,
-        "descripcion": "Extracción de campos y clasificación de documentos.",
-        "tareas": ["extraer_campos", "clasificar", "resumir"],
+        "descripcion": "Limpieza OCR (fallback sin Ollama).",
+        "tareas": ["limpiar_ocr"],
+        "backend_preferido": "llama_cpp",
     },
 }
 
@@ -95,8 +114,8 @@ PARAMETROS_DEFECTO = {
     "top_k": 40,
     "repeat_penalty": 1.1,
     "max_tokens": 2048,
-    "n_ctx": 4096,           # ventana de contexto
-    "n_threads": 2,          # ← cambia según tu CPU
+    "n_ctx": 4096,           # ventana de contexto (llama-cpp)
+    "n_threads": 6,          # núcleos físicos del OptiPlex
 }
 
 # Ajustes conservadores para máquinas con poca RAM
@@ -122,6 +141,6 @@ MSG_SIN_MODELO = (
 )
 
 MSG_SIN_BACKEND = (
-    "El backend de CIPA (llama-cpp-python) no está instalado. "
-    "Instálalo con: pip install llama-cpp-python"
+    "No hay ningún backend de CIPA disponible. "
+    "Instala Ollama (recomendado) o llama-cpp-python."
 )
