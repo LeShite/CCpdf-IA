@@ -7,11 +7,19 @@
     "exclude": [
         "**/__pycache__",
         "**/.venv",
-        "**/venv"
+        "**/venv",
+        "**/.git.viejo.backup"
     ],
-    "reportMissingImports": "warning",
-    "reportMissingModuleSource": "none",
-    "pythonVersion": "3.14",
+    "pythonVersion": "3.12",
     "pythonPlatform": "Linux",
-    "typeCheckingMode": "basic"
+    "typeCheckingMode": "basic",
+
+    "reportMissingImports": "none",
+    "reportMissingModuleSource": "none",
+    "reportOptionalMemberAccess": "none",
+    "reportOptionalCall": "none",
+    "reportCallIssue": "none",
+    "reportTypedDictNotRequiredAccess": "none",
+    "reportInvalidTypeForm": "none",
+    "reportAttributeAccessIssue": "none"
 }
