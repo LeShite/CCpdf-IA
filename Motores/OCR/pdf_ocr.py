@@ -1,5 +1,5 @@
 """
-pdf_ocr.py — Motor OCR de CCpdf IA (Tesseract, sin IA aún).
+pdf_ocr.py — Motor OCR de CCpdf IA (Tesseract + capa de texto).
 
     aplicar_ocr(archivos, destino, idioma="spa", ...) -> ResumenOCR
 
@@ -7,24 +7,31 @@ Toma PDFs escaneados (imágenes sin capa de texto) y produce PDFs
 con capa de texto invisible encima. El resultado es buscable y
 seleccionable, como un PDF nativo.
 
-Requiere (fuera de Python):
+Pipeline:
+    PDF → imágenes (pdf2image) → OCR con coordenadas (Tesseract)
+        → capa de texto invisible (reportlab) → PDF final (pypdf)
+
+Requiere:
   - Tesseract (motor OCR)
-  - Poppler (para renderizar PDF a imagen)
-  - Datos de idioma: tesseract-data-spa, tesseract-data-eng
+  - Poppler (renderizar PDF a imagen)
+  - Datos de idioma: tesseract-ocr-spa, tesseract-ocr-eng
 """
+import io
 import os
 import threading
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas as rl_canvas
 
 try:
     import pytesseract
-    from pytesseract import TesseractNotFoundError, TesseractError
+    from pytesseract import Output, TesseractNotFoundError, TesseractError
     HAY_TESSERACT = True
 except ImportError:
     pytesseract = None
+    Output = None
     TesseractNotFoundError = Exception
     TesseractError = Exception
     HAY_TESSERACT = False
@@ -61,6 +68,10 @@ IDIOMAS_DISPONIBLES = {
 DPI_DEFECTO = 300
 MIN_CARACTERES_POR_PAGINA = 20
 
+# Confianza mínima del OCR para incluir una palabra en la capa de texto.
+# 30 = descarta basura (manchas, ruido). Bajo a propósito para no perder datos.
+CONFIANZA_MINIMA = 30
+
 
 @dataclass
 class ResumenOCR:
@@ -68,6 +79,7 @@ class ResumenOCR:
     procesados: int = 0
     omitidos_ya_con_texto: list = field(default_factory=list)
     paginas_procesadas: int = 0
+    palabras_insertadas: int = 0
     errores: list = field(default_factory=list)
     cancelado: bool = False
     carpeta_salida: str = ""
@@ -80,6 +92,7 @@ class ResumenOCR:
             l.append("⚠ Proceso cancelado por el usuario.")
         l.append(f"PDFs procesados: {self.procesados} de {self.total}")
         l.append(f"Páginas con OCR: {self.paginas_procesadas}")
+        l.append(f"Palabras insertadas en la capa de texto: {self.palabras_insertadas}")
         l.append(f"Motor: {self.motor}  ·  Idioma: {self.idioma}")
         if self.omitidos_ya_con_texto:
             l.append(f"Omitidos (ya tenían texto) ({len(self.omitidos_ya_con_texto)}): "
@@ -91,8 +104,10 @@ class ResumenOCR:
         return "\n".join(l)
 
 
+# ═══════════════════════════════════════════════════════════════
+#  COMPROBACIONES
+# ═══════════════════════════════════════════════════════════════
 def info_motor_ocr() -> str:
-    """Texto corto con el estado del motor OCR (para la UI)."""
     if not HAY_TESSERACT:
         return "Motor OCR: no instalado (falta pytesseract)"
     if not HAY_PDF2IMAGE:
@@ -123,7 +138,6 @@ def _comprobar_dependencias() -> None:
 
 
 def pdf_es_escaneado(ruta: str, max_paginas: int = 5) -> bool:
-    """Devuelve True si el PDF parece escaneado (sin capa de texto)."""
     try:
         reader = PdfReader(ruta, strict=False)
         if reader.is_encrypted and not reader.decrypt(""):
@@ -153,6 +167,154 @@ def _ruta_unica(ruta: str, usadas: set) -> str:
     return candidata
 
 
+# ═══════════════════════════════════════════════════════════════
+#  OCR POR PÁGINA CON COORDENADAS
+# ═══════════════════════════════════════════════════════════════
+def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
+    """Devuelve una lista de dicts con texto y coordenadas en píxeles:
+        [{"texto": str, "x": int, "y": int, "w": int, "h": int}, ...]
+    """
+    try:
+        data = pytesseract.image_to_data(
+            imagen, lang=idioma, output_type=Output.DICT
+        )
+    except TesseractError:
+        return []
+
+    palabras = []
+    n = len(data.get("text", []))
+    for i in range(n):
+        texto = (data["text"][i] or "").strip()
+        if not texto:
+            continue
+        try:
+            conf = float(data["conf"][i])
+        except (ValueError, TypeError):
+            conf = -1
+        if conf < CONFIANZA_MINIMA:
+            continue
+        palabras.append({
+            "texto": texto,
+            "x": int(data["left"][i]),
+            "y": int(data["top"][i]),
+            "w": int(data["width"][i]),
+            "h": int(data["height"][i]),
+        })
+    return palabras
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CAPA DE TEXTO INVISIBLE (reportlab)
+# ═══════════════════════════════════════════════════════════════
+def _crear_capa_texto(
+    palabras: list,
+    ancho_pt: float,
+    alto_pt: float,
+    dpi: int,
+) -> io.BytesIO:
+    """Crea un PDF de una página con el texto invisible en su posición.
+
+    - Las coordenadas de Tesseract están en píxeles (respecto a la imagen
+      renderizada a `dpi` DPI).
+    - Las coordenadas PDF están en puntos (1 pt = 1/72 pulgada).
+    - El eje Y de PDF va hacia ARRIBA; el de la imagen va hacia ABAJO.
+    """
+    buffer = io.BytesIO()
+    c = rl_canvas.Canvas(buffer, pagesize=(ancho_pt, alto_pt))
+
+    escala = 72.0 / float(dpi)  # píxeles → puntos
+
+    for p in palabras:
+        texto = p["texto"]
+        if not texto:
+            continue
+
+        x_pt = p["x"] * escala
+        y_top_pt = p["y"] * escala
+        h_pt = p["h"] * escala
+
+        # Convertir Y (flip vertical)
+        y_pt = alto_pt - y_top_pt - h_pt
+
+        # Tamaño de fuente ajustado a la altura de la caja
+        font_size = max(1.0, h_pt * 0.95)
+
+        try:
+            text = c.beginText()
+            text.setTextOrigin(x_pt, y_pt)
+            text.setTextRenderMode(3)          # ← modo 3 = invisible
+            text.setFont("Helvetica", font_size)
+            text.textOut(texto)
+            c.drawText(text)
+        except Exception:
+            continue  # una palabra rara no debe tumbar la página
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ESCRITURA DEL PDF FINAL
+# ═══════════════════════════════════════════════════════════════
+def _escribir_pdf_ocr(
+    paginas_palabras: list,
+    paginas_originales: list,
+    ruta_salida: str,
+    dpi: int,
+) -> int:
+    """Escribe el PDF resultado con la capa de texto superpuesta.
+
+    Devuelve el número total de palabras insertadas.
+    """
+    writer = PdfWriter()
+    total_palabras = 0
+
+    for page, palabras in zip(paginas_originales, paginas_palabras):
+        # Tamaño de página en puntos (respetando CropBox si existe)
+        box = page.cropbox if hasattr(page, "cropbox") else page.mediabox
+        ancho_pt = float(box.width)
+        alto_pt = float(box.height)
+
+        if palabras:
+            capa_buffer = _crear_capa_texto(palabras, ancho_pt, alto_pt, dpi)
+            capa_reader = PdfReader(capa_buffer)
+            capa_pagina = capa_reader.pages[0]
+            page.merge_page(capa_pagina)
+            total_palabras += len(palabras)
+
+        writer.add_page(page)
+
+    # Escritura atómica
+    tmp = ruta_salida + ".tmp"
+    try:
+        with open(tmp, "wb") as f:
+            writer.write(f)
+
+        # Verificación: reabrir y comprobar páginas
+        try:
+            r = PdfReader(tmp, strict=False)
+            n = len(r.pages)
+        except Exception as e:
+            raise RuntimeError(f"el PDF generado no se pudo reabrir: {e}")
+        if n != len(paginas_originales):
+            raise RuntimeError(
+                f"el PDF generado tiene {n} páginas, se esperaban {len(paginas_originales)}")
+
+        os.replace(tmp, ruta_salida)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    return total_palabras
+
+
+# ═══════════════════════════════════════════════════════════════
+#  FUNCIÓN PRINCIPAL
+# ═══════════════════════════════════════════════════════════════
 def aplicar_ocr(
     archivos: list,
     destino: str = "",
@@ -190,6 +352,7 @@ def aplicar_ocr(
         motor=f"Tesseract {pytesseract.get_tesseract_version()}",
     )
 
+    # CIPA opcional (para limpiar el texto después del OCR)
     cipa = None
     if usar_cipa:
         try:
@@ -226,29 +389,38 @@ def aplicar_ocr(
                 raise RuntimeError("no se pudieron renderizar las páginas")
 
             reader = PdfReader(ruta, strict=False)
-            resultados_paginas = []
+            paginas_palabras = []
 
             for idx, img in enumerate(imagenes):
                 if cancelar is not None and cancelar.is_set():
                     raise _Cancelado()
-                try:
-                    texto = pytesseract.image_to_string(img, lang=idioma).strip()
-                except TesseractError as e:
-                    log(f"[AVISO] Página {idx + 1}: OCR falló ({e})")
-                    texto = ""
-                if texto and cipa is not None:
-                    texto = cipa.limpiar_texto(texto, contexto="documento escaneado")
-                resultados_paginas.append((idx, texto))
+                palabras = _extraer_palabras_con_coords(img, idioma)
+
+                # CIPA: si está activa, reescribimos el texto de cada palabra
+                # (corrige errores OCR sin cambiar la posición)
+                if cipa is not None and palabras:
+                    texto_completo = " ".join(p["texto"] for p in palabras)
+                    limpio = cipa.limpiar_texto(
+                        texto_completo, contexto="documento escaneado")
+                    # Nota: por ahora solo registramos; la sustitución
+                    # palabra-a-palabra vendrá en el Bloque 4.
+                    if limpio and limpio != texto_completo:
+                        log(f"[CIPA] Página {idx + 1}: texto mejorado")
+
+                paginas_palabras.append(palabras)
                 res.paginas_procesadas += 1
 
             base, _ = os.path.splitext(nombre)
             ruta_salida = _ruta_unica(
                 os.path.join(destino, f"{base}{sufijo}.pdf"), usadas)
 
-            _escribir_pdf_ocr(resultados_paginas, list(reader.pages), ruta_salida)
+            palabras_insertadas = _escribir_pdf_ocr(
+                paginas_palabras, list(reader.pages), ruta_salida, dpi)
 
+            res.palabras_insertadas += palabras_insertadas
             res.procesados += 1
-            log(f"[OK] {nombre}: {len(imagenes)} páginas procesadas")
+            log(f"[OK] {nombre}: {len(imagenes)} páginas, "
+                f"{palabras_insertadas} palabras insertadas")
 
         except _Cancelado:
             res.cancelado = True
@@ -264,31 +436,3 @@ def aplicar_ocr(
                     pass
 
     return res
-
-
-def _escribir_pdf_ocr(
-    paginas_con_ocr: list,
-    paginas_originales: list,
-    ruta_salida: str,
-) -> None:
-    """Escribe el PDF resultado con metadatos de OCR.
-
-    NOTA: la capa de texto invisible se implementará en el Bloque 3
-    con reportlab. Por ahora solo preserva las páginas originales
-    y escribe los metadatos del OCR en el resumen.
-    """
-    writer = PdfWriter()
-    for page in paginas_originales:
-        writer.add_page(page)
-
-    tmp = ruta_salida + ".tmp"
-    try:
-        with open(tmp, "wb") as f:
-            writer.write(f)
-        os.replace(tmp, ruta_salida)
-    finally:
-        if os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
