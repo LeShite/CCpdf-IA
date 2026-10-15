@@ -977,12 +977,41 @@ class CCPdfApp(ctk.CTk):
                             "El chat se conectará con CIPA en la Fase C2.")
 
     # ═══════════════════════════════════════════════════════════
-    #  ARRANQUE OCR (stub — se completa en Fase B2)
+    #  ARRANQUE OCR
     # ═══════════════════════════════════════════════════════════
+
     def _iniciar_ocr(self):
-        """Placeholder — se implementa en Fase B2."""
-        messagebox.showinfo("OCR",
-                            "La ejecución del OCR se conecta en la Fase B2.")
+        """Ejecuta OCR sobre los archivos seleccionados."""
+        if self._procesando:
+            return
+        if not hasattr(self, "_lista_ocr") or not self._lista_ocr:
+            messagebox.showwarning("Atención", "Agrega al menos un PDF.")
+            return
+
+        # ─── Recoger parámetros del formulario ───
+        # Idioma: convertir etiqueta a código ("Español" → "spa")
+        etiqueta_idioma = self._ocr_idioma_var.get()
+        codigo_idioma = "spa"
+        for cod, etq in IDIOMAS_OCR.items():
+            if etq == etiqueta_idioma:
+                codigo_idioma = cod
+                break
+
+        usar_cipa = bool(self._ocr_chk_cipa.get())
+        solo_escaneado = bool(self._ocr_chk_solo_escaneado.get())
+        destino = self._ocr_destino.get()
+
+        archivos = list(self._lista_ocr)
+        kwargs = dict(
+            archivos=archivos,
+            destino=destino,
+            idioma=codigo_idioma,
+            solo_si_escaneado=solo_escaneado,
+            usar_cipa=usar_cipa,
+        )
+
+        self.panel_ocr.escribir_log(f"Procesando {len(archivos)} archivo(s)…")
+        self._lanzar(_aplicar_ocr, kwargs, self.panel_ocr)
 
     # ═══════════════════════════════════════════════════════════
     #  Helpers comunes para las vistas
