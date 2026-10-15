@@ -6,7 +6,7 @@ Filosofía: pequeños modelos cuantizados a Q4_K_M para que corran
 incluso en portátiles modestos.
 """
 import os
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from .base import BackendBase
 
@@ -25,7 +25,9 @@ class BackendLlamaCpp(BackendBase):
     """Backend basado en llama.cpp (MIT). CPU-friendly, sin GPU."""
 
     def __init__(self):
-        self._modelo: Optional["Llama"] = None
+        # Nota: usamos Any porque 'Llama' solo existe si llama-cpp-python
+        # está instalado. Un tipo estricto rompería la importación.
+        self._modelo: Any = None
         self._ruta: Optional[str] = None
         self._params: dict = {}
 
