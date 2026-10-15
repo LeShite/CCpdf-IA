@@ -7,8 +7,11 @@ Toma PDFs escaneados (imágenes sin capa de texto) y produce PDFs
 con capa de texto invisible encima. El resultado es buscable y
 seleccionable, como un PDF nativo.
 
+El OCR se decide POR PÁGINA: en PDFs híbridos solo se procesan las
+páginas que lo necesitan; las demás pasan intactas al PDF final.
+
 Pipeline:
-    PDF → imágenes (pdf2image) → OCR con coordenadas (Tesseract)
+    PDF → imagen de UNA página (pdf2image) → OCR con coordenadas (Tesseract)
         → capa de texto invisible (reportlab) → PDF final (pypdf)
 
 Requiere:
@@ -16,6 +19,7 @@ Requiere:
   - Poppler (renderizar PDF a imagen)
   - Datos de idioma: tesseract-ocr-spa, tesseract-ocr-eng
 """
+import difflib
 import io
 import os
 import threading
@@ -23,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from pypdf import PdfReader, PdfWriter
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 
 try:
@@ -46,7 +51,8 @@ except ImportError:
 
 __all__ = [
     "ErrorOCR", "ResumenOCR",
-    "aplicar_ocr", "info_motor_ocr", "pdf_es_escaneado",
+    "aplicar_ocr", "info_motor_ocr",
+    "pdf_es_escaneado", "paginas_sin_texto",
     "IDIOMAS_DISPONIBLES",
 ]
 
@@ -66,11 +72,28 @@ IDIOMAS_DISPONIBLES = {
 }
 
 DPI_DEFECTO = 300
+
+# Una página con menos caracteres extraíbles que esto se considera "sin texto".
 MIN_CARACTERES_POR_PAGINA = 20
+
+# Una página que ADEMÁS contiene una imagen y tiene menos caracteres que
+# esto también se considera escaneada (típico: escaneo con un pie de página,
+# sello o marca de agua que sí trae texto real).
+MAX_TEXTO_CON_IMAGEN = 80
 
 # Confianza mínima del OCR para incluir una palabra en la capa de texto.
 # 30 = descarta basura (manchas, ruido). Bajo a propósito para no perder datos.
 CONFIANZA_MINIMA = 30
+
+# Capa de texto: 3 = invisible. (Constante para poder cambiarla en pruebas.)
+MODO_RENDER_TEXTO = 3
+FUENTE_TEXTO = "Helvetica"
+ESCALA_H_MIN = 20.0     # % mínimo de escala horizontal al ajustar al ancho
+ESCALA_H_MAX = 400.0    # % máximo
+
+# CIPA: una corrección que se parezca menos que esto al original se descarta
+# (protege contra "alucinaciones" del modelo).
+CIPA_SIMILITUD_MINIMA = 0.6
 
 
 @dataclass
@@ -80,6 +103,7 @@ class ResumenOCR:
     omitidos_ya_con_texto: list = field(default_factory=list)
     paginas_procesadas: int = 0
     palabras_insertadas: int = 0
+    palabras_corregidas_cipa: int = 0
     errores: list = field(default_factory=list)
     cancelado: bool = False
     carpeta_salida: str = ""
@@ -93,6 +117,8 @@ class ResumenOCR:
         l.append(f"PDFs procesados: {self.procesados} de {self.total}")
         l.append(f"Páginas con OCR: {self.paginas_procesadas}")
         l.append(f"Palabras insertadas en la capa de texto: {self.palabras_insertadas}")
+        if self.palabras_corregidas_cipa:
+            l.append(f"Palabras corregidas por CIPA: {self.palabras_corregidas_cipa}")
         l.append(f"Motor: {self.motor}  ·  Idioma: {self.idioma}")
         if self.omitidos_ya_con_texto:
             l.append(f"Omitidos (ya tenían texto) ({len(self.omitidos_ya_con_texto)}): "
@@ -137,7 +163,16 @@ def _comprobar_dependencias() -> None:
         )
 
 
+def _abrir_pdf(ruta: str) -> PdfReader:
+    """Abre el PDF y lo descifra (contraseña vacía). Lanza ErrorOCR si no se puede."""
+    reader = PdfReader(ruta, strict=False)
+    if reader.is_encrypted and not reader.decrypt(""):
+        raise ErrorOCR("el PDF está protegido con contraseña")
+    return reader
+
+
 def pdf_es_escaneado(ruta: str, max_paginas: int = 5) -> bool:
+    """Decide por DOCUMENTO si parece escaneado (mira las primeras páginas)."""
     try:
         reader = PdfReader(ruta, strict=False)
         if reader.is_encrypted and not reader.decrypt(""):
@@ -157,6 +192,59 @@ def pdf_es_escaneado(ruta: str, max_paginas: int = 5) -> bool:
         return True
 
 
+def _pagina_tiene_imagen(page) -> bool:
+    """¿La página declara alguna imagen en sus recursos? (heurística barata)."""
+    try:
+        recursos = page.get("/Resources")
+        if recursos is None:
+            return False
+        xobjetos = recursos.get_object().get("/XObject")
+        if xobjetos is None:
+            return False
+        xobjetos = xobjetos.get_object()
+        for nombre in xobjetos:
+            if xobjetos[nombre].get_object().get("/Subtype") == "/Image":
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def paginas_sin_texto(
+    ruta: str,
+    min_caracteres: int = MIN_CARACTERES_POR_PAGINA,
+    reader: Optional[PdfReader] = None,
+) -> list:
+    """Devuelve los índices (0-based) de las páginas que necesitan OCR.
+
+    A diferencia de pdf_es_escaneado() —que decide por documento—
+    esta función decide página a página (útil en PDFs híbridos).
+
+    Una página necesita OCR si:
+      - tiene menos de `min_caracteres` caracteres extraíbles, o
+      - contiene una imagen y menos de MAX_TEXTO_CON_IMAGEN caracteres
+        (escaneo con un pie de página o sello que sí trae texto real).
+
+    Si pasas `reader` (ya abierto y descifrado) se reutiliza en vez de
+    abrir el archivo otra vez. Los errores de lectura NO se ocultan:
+    la excepción sube para que el llamador la reporte.
+    """
+    if reader is None:
+        reader = _abrir_pdf(ruta)
+
+    limite_con_imagen = max(MAX_TEXTO_CON_IMAGEN, min_caracteres)
+    indices = []
+    for i, page in enumerate(reader.pages):
+        try:
+            texto = page.extract_text() or ""
+        except Exception:
+            texto = ""
+        n = len(texto.strip())
+        if n < min_caracteres or (n < limite_con_imagen and _pagina_tiene_imagen(page)):
+            indices.append(i)
+    return indices
+
+
 def _ruta_unica(ruta: str, usadas: set) -> str:
     base, ext = os.path.splitext(ruta)
     candidata, n = ruta, 2
@@ -172,7 +260,8 @@ def _ruta_unica(ruta: str, usadas: set) -> str:
 # ═══════════════════════════════════════════════════════════════
 def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
     """Devuelve una lista de dicts con texto y coordenadas en píxeles:
-        [{"texto": str, "x": int, "y": int, "w": int, "h": int}, ...]
+        [{"texto": str, "x": int, "y": int, "w": int, "h": int,
+          "linea": (bloque, párrafo, línea)}, ...]
     """
     try:
         data = pytesseract.image_to_data(
@@ -183,6 +272,10 @@ def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
 
     palabras = []
     n = len(data.get("text", []))
+    bloques = data.get("block_num", [0] * n)
+    parrafos = data.get("par_num", [0] * n)
+    lineas = data.get("line_num", [0] * n)
+
     for i in range(n):
         texto = (data["text"][i] or "").strip()
         if not texto:
@@ -199,55 +292,154 @@ def _extraer_palabras_con_coords(imagen, idioma: str) -> list:
             "y": int(data["top"][i]),
             "w": int(data["width"][i]),
             "h": int(data["height"][i]),
+            "linea": (bloques[i], parrafos[i], lineas[i]),
         })
     return palabras
 
 
 # ═══════════════════════════════════════════════════════════════
+#  CIPA: CORRECCIÓN POR LÍNEA
+# ═══════════════════════════════════════════════════════════════
+def _aplicar_cipa_por_linea(palabras: list, cipa) -> int:
+    """Corrige el texto de `palabras` (in situ) usando CIPA, línea por línea.
+
+    Reglas de seguridad —un LLM puede inventar—:
+      - Solo se acepta la corrección si tiene el MISMO número de palabras
+        que la línea original (así cada palabra conserva su caja).
+      - Las palabras que contienen dígitos NUNCA se tocan (folios, importes).
+      - Si la corrección se parece poco al original, se descarta.
+      - Solo se usa la primera línea de la respuesta del modelo.
+
+    Devuelve cuántas palabras se modificaron.
+    """
+    lineas: dict = {}
+    for p in palabras:
+        lineas.setdefault(p.get("linea"), []).append(p)
+
+    cambios = 0
+    for grupo in lineas.values():
+        originales = [p["texto"] for p in grupo]
+        texto = " ".join(originales)
+        if not any(ch.isalpha() for ch in texto):
+            continue
+
+        try:
+            limpio = cipa.limpiar_texto(texto, contexto="documento escaneado")
+        except Exception:
+            continue
+
+        respuesta = (limpio or "").strip().splitlines()
+        if not respuesta:
+            continue
+        nuevos = respuesta[0].split()
+        if len(nuevos) != len(originales):
+            continue
+        if difflib.SequenceMatcher(None, texto, " ".join(nuevos)).ratio() < CIPA_SIMILITUD_MINIMA:
+            continue
+
+        for p, orig, nuevo in zip(grupo, originales, nuevos):
+            if any(ch.isdigit() for ch in orig):
+                continue
+            if nuevo != orig:
+                p["texto"] = nuevo
+                cambios += 1
+    return cambios
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GEOMETRÍA: CROPBOX Y ROTACIÓN
+# ═══════════════════════════════════════════════════════════════
+def _geometria_pagina(page) -> tuple:
+    """(izq, abajo, ancho, alto, rotación) de la CropBox, sin rotar.
+
+    La rotación se normaliza a 0, 90, 180 o 270 (sentido horario,
+    tal como se muestra la página).
+    """
+    box = page.cropbox
+    izq, abajo = float(box.left), float(box.bottom)
+    ancho, alto = float(box.width), float(box.height)
+    try:
+        rot = int(page.rotation or 0)
+    except Exception:
+        rot = 0
+    rot = (round(rot / 90) * 90) % 360
+    return izq, abajo, ancho, alto, rot
+
+
+def _visual_a_usuario(vx: float, vy: float, ancho: float, alto: float, rot: int) -> tuple:
+    """Convierte un punto de la página TAL COMO SE VE (origen abajo-izquierda,
+    ya rotada) al espacio de usuario SIN rotar (relativo a la CropBox).
+    """
+    if rot == 90:
+        return ancho - vy, vx
+    if rot == 180:
+        return ancho - vx, alto - vy
+    if rot == 270:
+        return vy, alto - vx
+    return vx, vy
+
+
+def _limpiar_para_fuente(texto: str) -> str:
+    """Helvetica estándar solo cubre cp1252; lo demás se cambia por '?'."""
+    return texto.encode("cp1252", errors="replace").decode("cp1252")
+
+
+# ═══════════════════════════════════════════════════════════════
 #  CAPA DE TEXTO INVISIBLE (reportlab)
 # ═══════════════════════════════════════════════════════════════
-def _crear_capa_texto(
-    palabras: list,
-    ancho_pt: float,
-    alto_pt: float,
-    dpi: int,
-) -> io.BytesIO:
+def _crear_capa_texto(palabras: list, geometria: tuple, dpi: int) -> io.BytesIO:
     """Crea un PDF de una página con el texto invisible en su posición.
 
-    - Las coordenadas de Tesseract están en píxeles (respecto a la imagen
-      renderizada a `dpi` DPI).
+    - Las coordenadas de Tesseract están en píxeles de la imagen que
+      Poppler renderizó (CropBox, ya rotada) a `dpi` DPI.
     - Las coordenadas PDF están en puntos (1 pt = 1/72 pulgada).
     - El eje Y de PDF va hacia ARRIBA; el de la imagen va hacia ABAJO.
+    - Si la página tiene /Rotate, el texto se dibuja girado esa misma
+      cantidad en el espacio sin rotar, para que al mostrarla quede recto.
+    - Cada palabra se estira (escala horizontal) para ocupar el ancho de
+      su caja, así la selección coincide con lo que se ve.
     """
+    izq, abajo, ancho, alto, rot = geometria
+    ancho_vis, alto_vis = (alto, ancho) if rot in (90, 270) else (ancho, alto)
+
     buffer = io.BytesIO()
-    c = rl_canvas.Canvas(buffer, pagesize=(ancho_pt, alto_pt))
+    c = rl_canvas.Canvas(
+        buffer, pagesize=(max(izq + ancho, 1.0), max(abajo + alto, 1.0)))
 
     escala = 72.0 / float(dpi)  # píxeles → puntos
 
     for p in palabras:
-        texto = p["texto"]
-        if not texto:
+        texto = _limpiar_para_fuente(p["texto"])
+        if not texto.strip():
             continue
 
-        x_pt = p["x"] * escala
-        y_top_pt = p["y"] * escala
+        w_pt = p["w"] * escala
         h_pt = p["h"] * escala
 
-        # Convertir Y (flip vertical)
-        y_pt = alto_pt - y_top_pt - h_pt
+        # Esquina inferior-izquierda de la caja, en la página tal como se ve
+        vx = p["x"] * escala
+        vy = alto_vis - (p["y"] + p["h"]) * escala
+        ux, uy = _visual_a_usuario(vx, vy, ancho, alto, rot)
 
-        # Tamaño de fuente ajustado a la altura de la caja
         font_size = max(1.0, h_pt * 0.95)
 
+        c.saveState()
         try:
-            text = c.beginText()
-            text.setTextOrigin(x_pt, y_pt)
-            text.setTextRenderMode(3)          # ← modo 3 = invisible
-            text.setFont("Helvetica", font_size)
-            text.textOut(texto)
-            c.drawText(text)
+            c.translate(izq + ux, abajo + uy)
+            c.rotate(rot)
+            t = c.beginText(0, 0)
+            t.setTextRenderMode(MODO_RENDER_TEXTO)
+            t.setFont(FUENTE_TEXTO, font_size)
+            natural = stringWidth(texto, FUENTE_TEXTO, font_size)
+            if natural > 0 and w_pt > 0:
+                t.setHorizScale(
+                    min(ESCALA_H_MAX, max(ESCALA_H_MIN, w_pt / natural * 100.0)))
+            t.textOut(texto)
+            c.drawText(t)
         except Exception:
-            continue  # una palabra rara no debe tumbar la página
+            pass  # una palabra rara no debe tumbar la página
+        finally:
+            c.restoreState()
 
     c.save()
     buffer.seek(0)
@@ -265,21 +457,20 @@ def _escribir_pdf_ocr(
 ) -> int:
     """Escribe el PDF resultado con la capa de texto superpuesta.
 
+    `paginas_palabras[i]` puede ser:
+      - list: palabras OCR → se añade capa de texto.
+      - None: la página no necesitaba OCR → se deja intacta.
+
     Devuelve el número total de palabras insertadas.
     """
     writer = PdfWriter()
     total_palabras = 0
 
     for page, palabras in zip(paginas_originales, paginas_palabras):
-        # Tamaño de página en puntos (respetando CropBox si existe)
-        box = page.cropbox if hasattr(page, "cropbox") else page.mediabox
-        ancho_pt = float(box.width)
-        alto_pt = float(box.height)
-
         if palabras:
-            capa_buffer = _crear_capa_texto(palabras, ancho_pt, alto_pt, dpi)
-            capa_reader = PdfReader(capa_buffer)
-            capa_pagina = capa_reader.pages[0]
+            geometria = _geometria_pagina(page)
+            capa_buffer = _crear_capa_texto(palabras, geometria, dpi)
+            capa_pagina = PdfReader(capa_buffer).pages[0]
             page.merge_page(capa_pagina)
             total_palabras += len(palabras)
 
@@ -326,8 +517,9 @@ def aplicar_ocr(
     callback_progreso: Optional[Callable[[int, int, str], None]] = None,
     callback_log: Optional[Callable[[str], None]] = None,
     cancelar: Optional[threading.Event] = None,
+    min_caracteres: int = MIN_CARACTERES_POR_PAGINA,
 ) -> ResumenOCR:
-    """Aplica OCR a los PDFs escaneados y genera PDFs buscables."""
+    """Aplica OCR (decidido por página) a los PDFs y genera PDFs buscables."""
     log = callback_log or (lambda m: None)
 
     archivos = [a for a in archivos if a]
@@ -352,87 +544,107 @@ def aplicar_ocr(
         motor=f"Tesseract {pytesseract.get_tesseract_version()}",
     )
 
-    # CIPA opcional (para limpiar el texto después del OCR)
+    # CIPA opcional (para corregir el texto después del OCR)
     cipa = None
     if usar_cipa:
         try:
             from Motores.CIPA import CIPA
             cipa = CIPA()
-            if not cipa.disponible():
-                log("[AVISO] CIPA no disponible, se usará solo OCR clásico.")
-                cipa = None
+            cipa.cargar_modelo("limpieza")  # sin cargar el modelo, nunca está disponible
         except Exception as e:
-            log(f"[AVISO] No se pudo cargar CIPA: {e}")
+            log(f"[AVISO] CIPA no disponible ({e}); se usará solo OCR clásico.")
             cipa = None
 
     usadas = set()
 
-    for i, ruta in enumerate(archivos, start=1):
-        if cancelar is not None and cancelar.is_set():
-            res.cancelado = True
-            break
+    try:
+        for i, ruta in enumerate(archivos, start=1):
+            if cancelar is not None and cancelar.is_set():
+                res.cancelado = True
+                break
 
-        nombre = os.path.basename(ruta)
-        try:
-            if not os.path.isfile(ruta):
-                raise FileNotFoundError("el archivo ya no existe")
+            nombre = os.path.basename(ruta)
+            try:
+                if not os.path.isfile(ruta):
+                    raise FileNotFoundError("el archivo ya no existe")
 
-            if solo_si_escaneado and not pdf_es_escaneado(ruta):
-                res.omitidos_ya_con_texto.append(nombre)
-                log(f"[OMITIDO] {nombre}: ya tiene capa de texto")
-                continue
+                # Abrir una sola vez (y descifrar) antes de contar páginas
+                reader = _abrir_pdf(ruta)
+                total_paginas = len(reader.pages)
 
-            log(f"[OCR] Procesando {nombre}…")
+                if solo_si_escaneado:
+                    paginas_ocr = paginas_sin_texto(
+                        ruta, min_caracteres=min_caracteres, reader=reader)
+                    if not paginas_ocr:
+                        res.omitidos_ya_con_texto.append(nombre)
+                        log(f"[OMITIDO] {nombre}: todas las páginas ya tienen texto")
+                        continue
+                    log(f"[OCR] {nombre}: {len(paginas_ocr)} de {total_paginas} "
+                        f"páginas necesitan OCR")
+                else:
+                    paginas_ocr = list(range(total_paginas))
+                    log(f"[OCR] Procesando {nombre} completo "
+                        f"({total_paginas} páginas)…")
 
-            imagenes = convert_from_path(ruta, dpi=dpi, fmt="RGB")
-            if not imagenes:
-                raise RuntimeError("no se pudieron renderizar las páginas")
+                # None = página intacta (no necesitó OCR)
+                paginas_palabras: list[Optional[list]] = [None] * total_paginas
 
-            reader = PdfReader(ruta, strict=False)
-            paginas_palabras = []
+                for idx in paginas_ocr:
+                    if cancelar is not None and cancelar.is_set():
+                        raise _Cancelado()
 
-            for idx, img in enumerate(imagenes):
-                if cancelar is not None and cancelar.is_set():
-                    raise _Cancelado()
-                palabras = _extraer_palabras_con_coords(img, idioma)
+                    # Renderizar SOLO esta página (ahorra RAM). Se usa la
+                    # CropBox para que coincida con la geometría de la capa.
+                    imgs = convert_from_path(
+                        ruta, dpi=dpi, fmt="RGB",
+                        first_page=idx + 1, last_page=idx + 1,
+                        use_cropbox=True)
+                    if not imgs:
+                        raise RuntimeError(
+                            f"no se pudo renderizar la página {idx + 1}")
 
-                # CIPA: si está activa, reescribimos el texto de cada palabra
-                # (corrige errores OCR sin cambiar la posición)
-                if cipa is not None and palabras:
-                    texto_completo = " ".join(p["texto"] for p in palabras)
-                    limpio = cipa.limpiar_texto(
-                        texto_completo, contexto="documento escaneado")
-                    # Nota: por ahora solo registramos; la sustitución
-                    # palabra-a-palabra vendrá en el Bloque 4.
-                    if limpio and limpio != texto_completo:
-                        log(f"[CIPA] Página {idx + 1}: texto mejorado")
+                    palabras = _extraer_palabras_con_coords(imgs[0], idioma)
+                    del imgs  # liberar la imagen cuanto antes
 
-                paginas_palabras.append(palabras)
-                res.paginas_procesadas += 1
+                    if cipa is not None and palabras:
+                        cambios = _aplicar_cipa_por_linea(palabras, cipa)
+                        if cambios:
+                            res.palabras_corregidas_cipa += cambios
+                            log(f"[CIPA] Página {idx + 1}: "
+                                f"{cambios} palabras corregidas")
 
-            base, _ = os.path.splitext(nombre)
-            ruta_salida = _ruta_unica(
-                os.path.join(destino, f"{base}{sufijo}.pdf"), usadas)
+                    paginas_palabras[idx] = palabras
+                    res.paginas_procesadas += 1
 
-            palabras_insertadas = _escribir_pdf_ocr(
-                paginas_palabras, list(reader.pages), ruta_salida, dpi)
+                base, _ = os.path.splitext(nombre)
+                ruta_salida = _ruta_unica(
+                    os.path.join(destino, f"{base}{sufijo}.pdf"), usadas)
 
-            res.palabras_insertadas += palabras_insertadas
-            res.procesados += 1
-            log(f"[OK] {nombre}: {len(imagenes)} páginas, "
-                f"{palabras_insertadas} palabras insertadas")
+                palabras_insertadas = _escribir_pdf_ocr(
+                    paginas_palabras, list(reader.pages), ruta_salida, dpi)
 
-        except _Cancelado:
-            res.cancelado = True
-            break
-        except Exception as e:
-            res.errores.append((nombre, str(e)))
-            log(f"[ERROR] {nombre}: {e}")
-        finally:
-            if callback_progreso:
-                try:
-                    callback_progreso(i, res.total, nombre)
-                except Exception:
-                    pass
+                res.palabras_insertadas += palabras_insertadas
+                res.procesados += 1
+                log(f"[OK] {nombre}: {len(paginas_ocr)} páginas con OCR, "
+                    f"{palabras_insertadas} palabras insertadas")
+
+            except _Cancelado:
+                res.cancelado = True
+                break
+            except Exception as e:
+                res.errores.append((nombre, str(e)))
+                log(f"[ERROR] {nombre}: {e}")
+            finally:
+                if callback_progreso:
+                    try:
+                        callback_progreso(i, res.total, nombre)
+                    except Exception:
+                        pass
+    finally:
+        if cipa is not None:
+            try:
+                cipa.descargar_modelo()  # liberar RAM
+            except Exception:
+                pass
 
     return res
