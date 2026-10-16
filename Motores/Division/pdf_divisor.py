@@ -119,8 +119,8 @@ class ResumenDivision:
 # --- Patrón del campo UNIDAD MEDICA ---------------------------------------
 _RE_UNIDAD = re.compile(
     r"UNIDAD\s*M[EÉ]DICA\s*[:\-]\s*(.+?)"
-    r"(?=\s*(?:MODELO|CIUDAD|EQUIPO|CONTRATO|MARCA|INSTITUCI[OÓ]N|"
-    r"NO\.?\s*SERIE|DATOS\s+DEL|$))",
+    r"(?=\n|\s*(?:MODELO|CIUDAD|EQUIPO|CONTRATO|MARCA|INSTITUCI[OÓ]N|"
+    r"NO\.?\s*SERIE|DATOS\s+DEL)\s*:|$)",
     re.IGNORECASE | re.DOTALL,
 )
 

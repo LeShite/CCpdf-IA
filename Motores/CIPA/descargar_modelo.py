@@ -11,6 +11,7 @@ Uso desde Python:
 
     descargar("limpieza")  # descarga con barra de progreso
 """
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -18,21 +19,38 @@ from pathlib import Path
 # Importaciones relativas para funcionar como módulo
 try:
     from .config import MODELOS, RUTA_MODELOS
+    from .backends.ollama import BackendOllama
 except ImportError:
     # Fallback si se ejecuta como script suelto
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from Motores.CIPA.config import MODELOS, RUTA_MODELOS
+    from Motores.CIPA.backends.ollama import BackendOllama
 
 
 def listar_modelos():
-    """Imprime los modelos disponibles y su estado (descargado o no)."""
+    """Imprime los modelos disponibles y su estado (descargado o no).
+
+    Los modelos de Ollama no son un archivo local en RUTA_MODELOS: hay
+    que preguntarle al servidor de Ollama si ya los tiene.
+    """
+    backend = BackendOllama()
+    ollama_ok = backend.servidor_disponible()
+
     print()
     print("═" * 70)
     print(f"{'CLAVE':<12} {'NOMBRE':<30} {'TAMAÑO':<10} {'ESTADO':<12}")
     print("═" * 70)
     for clave, info in MODELOS.items():
-        archivo = RUTA_MODELOS / info["archivo"]
-        estado = "✓ listo" if archivo.is_file() else "✗ falta"
+        if info.get("backend_preferido") == "ollama":
+            if not ollama_ok:
+                estado = "? sin Ollama"
+            elif backend._modelo_existe(info["archivo"]):
+                estado = "✓ listo"
+            else:
+                estado = "✗ falta"
+        else:
+            archivo = RUTA_MODELOS / info["archivo"]
+            estado = "✓ listo" if archivo.is_file() else "✗ falta"
         tamano = f"{info['tamano_mb']} MB"
         print(f"{clave:<12} {info['nombre']:<30} {tamano:<10} {estado:<12}")
     print("═" * 70)
@@ -60,10 +78,49 @@ def _barra_progreso(bloque_num, tamano_bloque, tamano_total):
         sys.stdout.flush()
 
 
+def _descargar_ollama(info: dict, forzar: bool = False) -> Path:
+    """Descarga (`ollama pull`) un modelo servido por Ollama.
+
+    Estos modelos no son un archivo .gguf local: viven en el almacén de
+    Ollama, identificados por nombre (ej. "qwen2.5:1.5b"). La URL
+    "ollama://..." del catálogo es solo informativa; urllib no entiende
+    ese esquema, así que no se puede descargar con urlretrieve.
+    """
+    nombre = info["archivo"]
+    backend = BackendOllama()
+    if not backend.servidor_disponible():
+        raise RuntimeError(
+            "Ollama no está activo. Instálalo y ejecútalo "
+            "(https://ollama.com) antes de descargar este modelo."
+        )
+
+    if not forzar and backend._modelo_existe(nombre):
+        print(f"✓ El modelo {info['nombre']} ya está instalado en Ollama.")
+        return RUTA_MODELOS
+
+    print()
+    print(f"Descargando con Ollama: {info['nombre']} ({nombre})")
+    print(f"Licencia: {info['licencia']}")
+    print()
+    try:
+        subprocess.run(["ollama", "pull", nombre], check=True)
+    except FileNotFoundError:
+        raise RuntimeError(
+            "No se encontró el comando 'ollama'. Instálalo desde "
+            "https://ollama.com"
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"'ollama pull {nombre}' falló: {e}")
+
+    print(f"\n✓ {info['nombre']} descargado.")
+    return RUTA_MODELOS
+
+
 def descargar(clave: str, forzar: bool = False) -> Path:
     """Descarga el modelo `clave`. Si ya existe y `forzar=False`, no hace nada.
 
-    Devuelve la ruta al archivo descargado.
+    Devuelve la ruta al archivo descargado (o a RUTA_MODELOS si el
+    modelo vive en Ollama, no en un archivo local).
     Lanza ValueError si la clave no existe.
     """
     info = MODELOS.get(clave)
@@ -71,6 +128,9 @@ def descargar(clave: str, forzar: bool = False) -> Path:
         raise ValueError(
             f"Modelo desconocido: {clave!r}. "
             f"Disponibles: {', '.join(MODELOS.keys())}")
+
+    if info.get("backend_preferido") == "ollama":
+        return _descargar_ollama(info, forzar=forzar)
 
     archivo = RUTA_MODELOS / info["archivo"]
 

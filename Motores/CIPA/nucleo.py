@@ -61,7 +61,23 @@ class CIPA:
     # ═══════════════════════════════════════════════════════════
     def backend_instalado(self) -> bool:
         """¿Hay algún backend disponible (Ollama o llama-cpp-python)?"""
+        self._actualizar_backend()
         return self._backend is not None
+
+    def _actualizar_backend(self) -> None:
+        """Vuelve a comprobar si Ollama está disponible.
+
+        El backend solo se detectaba una vez, en __init__: si Ollama
+        arrancaba después de crear CIPA, se quedaba en llama-cpp (o sin
+        backend) para siempre. Aquí se vuelve a comprobar cada vez que se
+        consulta el estado, y se cambia a Ollama en cuanto responde.
+        """
+        if self._backend_nombre == "ollama":
+            return
+        if self._backend_ollama.servidor_disponible():
+            self._backend = self._backend_ollama
+            self._backend_nombre = "ollama"
+            self._modelo_actual = None
 
     def modelo_cargado(self) -> bool:
         """¿Hay un modelo cargado en memoria?"""
@@ -69,6 +85,7 @@ class CIPA:
 
     def disponible(self) -> bool:
         """¿Podemos generar texto ahora mismo?"""
+        self._actualizar_backend()
         return self.modelo_cargado()
 
     def estado(self) -> dict:
@@ -135,6 +152,16 @@ class CIPA:
         """
         if self._backend is None:
             raise ErrorCIPA(MSG_SIN_BACKEND)
+
+        # Si pedimos un modelo pensado para Ollama pero el backend activo
+        # es llama-cpp, usar su variante "_llama_cpp" si existe (ver
+        # MODELOS en config.py), en vez de fallar siempre con "sin modelo".
+        if self._backend_nombre == "llama_cpp":
+            info_pedida = MODELOS.get(clave)
+            if info_pedida and info_pedida.get("backend_preferido") == "ollama":
+                alternativa = f"{clave}_llama_cpp"
+                if alternativa in MODELOS:
+                    clave = alternativa
 
         # ¿Ya está cargado este mismo modelo?
         if self._modelo_actual == clave and self._backend.disponible():
@@ -229,7 +256,7 @@ class CIPA:
         # 0. Quitar guiones decorativos al principio (--- o === al inicio)
         while limpio.startswith("---") or limpio.startswith("==="):
             limpio = limpio.split("\n", 1)[-1].strip() if "\n" in limpio else ""
-        limpio = limpio.strip("-= \t")
+        limpio = limpio.strip("= \t")
 
 
         # 1. Quitar bloques de código markdown si los hubiera
@@ -248,7 +275,7 @@ class CIPA:
             "\nCorrecciones",
             "\nCambios",
             "\n\nExplicación",
-            "A continuación",
+            "\nA continuación",
         ]
         for marcador in marcadores_corte:
             if marcador in limpio:

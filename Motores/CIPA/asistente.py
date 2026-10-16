@@ -17,6 +17,7 @@ Todo local. Nada sale del equipo.
 """
 import json
 import os
+import re
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -253,7 +254,7 @@ TOOLS = [
 class AsistenteCIPA:
     """Chat conversacional con tool calling sobre documentos PDF."""
 
-    MAX_TURNOS_HISTORIAL = 10   # últimos N mensajes (user+assistant) que se mantienen
+    MAX_MENSAJES_HISTORIAL = 10   # últimos N mensajes reales que se mantienen
     MAX_CARACTERES_CONTEXTO = 9000  # límite de texto del PDF que metemos en el prompt
 
     def __init__(self):
@@ -526,10 +527,19 @@ class AsistenteCIPA:
         """
         m = mensaje.lower().strip()
 
+        # Los atajos solo valen si ya hay un documento cargado y el mensaje
+        # no menciona una ruta o un PDF (eso implica una petición combinada,
+        # p. ej. "lee el PDF informe.pdf y hazme un resumen").
+        if not self.documento_cargado():
+            return None
+        if re.search(r"[/~]|\.pdf\b", m):
+            return None
+
         # ─── Resumen ───
-        palabras_resumen = ("resume", "resumen", "resúmelo", "hazme un resumen",
-                            "dame un resumen", "sintetiza", "síntesis")
-        if any(p in m for p in palabras_resumen):
+        palabras_resumen = (r"\bresume\b", r"\bresumen\b", r"\bresúmelo\b",
+                            r"\bhazme un resumen\b", r"\bdame un resumen\b",
+                            r"\bsintetiza\b", r"\bsíntesis\b")
+        if any(re.search(p, m) for p in palabras_resumen):
             return self._tool_resumir()
 
         # ─── Info del documento ───
@@ -547,6 +557,13 @@ class AsistenteCIPA:
 
     # ─── Internos ───
     def _recortar_historial(self):
-        """Mantiene los últimos N mensajes para no llenar el contexto."""
-        if len(self._historial) > self.MAX_TURNOS_HISTORIAL * 2:
-            self._historial = self._historial[-self.MAX_TURNOS_HISTORIAL * 2:]
+        """Mantiene los últimos MAX_MENSAJES_HISTORIAL mensajes, sin dejar
+        un grupo assistant(tool_calls) + tool a medias."""
+        if len(self._historial) <= self.MAX_MENSAJES_HISTORIAL:
+            return
+        recortado = self._historial[-self.MAX_MENSAJES_HISTORIAL:]
+        # No empezar por un mensaje "tool" huérfano (sin el assistant con
+        # tool_calls que lo precede, que quedó fuera del recorte).
+        while recortado and recortado[0].get("role") == "tool":
+            recortado.pop(0)
+        self._historial = recortado
