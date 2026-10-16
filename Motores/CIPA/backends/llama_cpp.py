@@ -16,7 +16,11 @@ from .base import BackendBase
 try:
     from llama_cpp import Llama  # type: ignore[import-not-found]
     HAY_LLAMA_CPP = True
-except ImportError:
+except (ImportError, OSError, FileNotFoundError):
+    # ImportError: el paquete no está instalado.
+    # OSError/FileNotFoundError: está instalado pero su librería nativa
+    # (libllama.so/.dll) no se encuentra (p. ej. dentro de un empaquetado
+    # con PyInstaller que no la incluyó). Ver BUG-022.
     Llama = None
     HAY_LLAMA_CPP = False
 

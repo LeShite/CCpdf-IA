@@ -32,6 +32,7 @@ leer el código.
 | [BUG-018](#bug-018) | 🟡 | Interfaz | Bloqueos de la interfaz por llamadas lentas en el hilo principal |
 | [BUG-019](#bug-019) | 🟡 | Configuración | Carpetas de Divisor/Fusionador, temas e idiomas se guardan pero no se usan |
 | [BUG-020](#bug-020) | ⚪ | Varios | Errores menores y detalles |
+| [BUG-022](#bug-022) | 🟡 | CIPA | ✅ `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa |
 | [DOC-001](#doc-001) | ⚪ | Docs | Documentación desactualizada o incorrecta |
 
 Severidad: 🔴 crítico · 🟠 alto · 🟡 medio · ⚪ bajo
@@ -572,6 +573,21 @@ visor y dejar el motor propio como respaldo.
   fuente sustituta.
 - Al cerrar la app con un proceso en marcha, el hilo daemon muere a mitad
   de escritura y pueden quedar archivos `.tmp`.
+
+---
+
+<a id="bug-022"></a>
+## 🟡 BUG-022 — `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa ✅
+
+**Módulo**: `Motores/CIPA/backends/llama_cpp.py`
+
+El `except` solo atrapa `ImportError`, pero la lib nativa lanza
+`FileNotFoundError`/`OSError`.
+
+**Fix aplicado**: ampliar el `except` a
+`(ImportError, OSError, FileNotFoundError)`.
+
+**Pendiente**: mejorar el mensaje de degradación.
 
 ---
 

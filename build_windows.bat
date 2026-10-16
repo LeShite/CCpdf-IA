@@ -10,8 +10,8 @@ if exist build rmdir /S /Q build
 if exist dist  rmdir /S /Q dist
 
 echo [3/4] Empaquetando con PyInstaller...
-python -m PyInstaller ccpdf.spec --noconfirm --clean
+python -m PyInstaller ccpdf_ia.spec --noconfirm --clean
 
 echo [4/4] Listo.
-echo Ejecutable en: dist\CCpdf.exe
+echo Ejecutable en: dist\CCpdf IA.exe
 pause
