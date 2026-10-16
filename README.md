@@ -6,7 +6,9 @@ Suite local de gestión de PDF con inteligencia artificial integrada.
 
 - **100% local** — ningún dato sale de tu equipo.
 - **CIPA** — Capa de Inteligencia de Procesamiento Aumentado (IA local).
-- **OCR** con Tesseract + IA para PDFs escaneados.
+- **OCR** con Tesseract para PDFs escaneados, con limpieza opcional vía CIPA
+  (IA local, activable con "Usar CIPA"; ver limitaciones en
+  `docs/KNOWN_ISSUES.md`).
 - **Extracción**, **fusión**, **división** y **compresión** de PDFs.
 - **Licencia MIT** — código abierto.
 

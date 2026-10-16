@@ -7,8 +7,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-# ⚠️ Cambia esto por tu repositorio real cuando lo subas a GitHub
-REPO = "tu-usuario/CCpdf"
+REPO = "LeShite/CCpdf-IA"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 6
 

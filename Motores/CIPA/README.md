@@ -13,10 +13,10 @@ CIPA es la capa de IA local de **CCpdf IA**. Procesa documentos
 
 ## Tareas soportadas
 
-| Tarea | Modelo | Licencia | Tamaño |
-|---|---|---|---|
-| Limpieza OCR | Phi-3.5-mini | MIT | ~2.4 GB |
-| Extracción de campos | Qwen2.5-1.5B | Apache 2.0 | ~1.0 GB |
-| Clasificación | Qwen2.5-1.5B | Apache 2.0 | ~1.0 GB |
+| Tarea | Modelo | Runtime | Licencia | Tamaño |
+|---|---|---|---|---|
+| Limpieza OCR | Qwen2.5-1.5B-instruct | Ollama (preferido) | Apache 2.0 | ~1.0 GB |
+| Limpieza OCR (sin Ollama) | Phi-3.5-mini-instruct | llama.cpp (fallback) | MIT | ~2.4 GB |
+| Extracción de campos / Clasificación | Qwen2.5-1.5B-instruct | Ollama | Apache 2.0 | ~1.0 GB |
 
 ## Estructura

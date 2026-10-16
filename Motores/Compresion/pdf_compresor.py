@@ -22,6 +22,7 @@ Garantías:
 import glob
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -142,6 +143,14 @@ def _fmt(n: float) -> str:
 # ----------------------------------------------------------------------------
 # Ghostscript
 # ----------------------------------------------------------------------------
+def _clave_version_gs(ruta: str) -> tuple:
+    """Extrae "gs10.02.1" → (10, 2, 1) para ordenar versiones numéricamente."""
+    m = re.search(r"gs(\d+(?:\.\d+)*)", ruta)
+    if not m:
+        return (0,)
+    return tuple(int(p) for p in m.group(1).split("."))
+
+
 def buscar_ghostscript() -> Optional[str]:
     """Ruta del ejecutable de Ghostscript, o None si no está instalado."""
     if _GS_CACHE["comprobado"]:
@@ -156,7 +165,10 @@ def buscar_ghostscript() -> Optional[str]:
     if ruta is None and sys.platform.startswith("win"):
         for patron in (r"C:\Program Files\gs\gs*\bin\gswin64c.exe",
                        r"C:\Program Files (x86)\gs\gs*\bin\gswin32c.exe"):
-            hallados = sorted(glob.glob(patron))
+            # sorted() por texto pondría "gs9.56.1" después de "gs10.02.1"
+            # (compara carácter a carácter: '9' > '1'), eligiendo la versión
+            # más antigua. Se ordena por el número de versión real.
+            hallados = sorted(glob.glob(patron), key=_clave_version_gs)
             if hallados:
                 ruta = hallados[-1]
                 break

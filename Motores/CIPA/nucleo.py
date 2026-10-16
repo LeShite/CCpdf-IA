@@ -42,16 +42,13 @@ class CIPA:
         self._backend_ollama = BackendOllama()
         self._backend_llama = BackendLlamaCpp() if HAY_LLAMA_CPP else None
 
-        # Elegir backend: Ollama > llama-cpp-python > ninguno
-        if self._backend_ollama.servidor_disponible():
-            self._backend = self._backend_ollama
-            self._backend_nombre: Optional[str] = "ollama"
-        elif self._backend_llama is not None:
-            self._backend = self._backend_llama
-            self._backend_nombre = "llama_cpp"
-        else:
-            self._backend = None
-            self._backend_nombre = None
+        # El backend se elige la primera vez que se necesita (ver
+        # _actualizar_backend), no aquí: hacerlo en __init__ implicaba una
+        # petición HTTP a Ollama con 3 s de timeout, que bloqueaba el hilo
+        # que creara CIPA().
+        self._backend = None
+        self._backend_nombre: Optional[str] = None
+        self._backend_resuelto = False
 
         self._modelo_actual: Optional[str] = None
         self._tarea_actual: Optional[str] = None
@@ -65,13 +62,26 @@ class CIPA:
         return self._backend is not None
 
     def _actualizar_backend(self) -> None:
-        """Vuelve a comprobar si Ollama está disponible.
+        """Elige el backend (la primera vez) o comprueba si Ollama ya está
+        disponible (las siguientes).
 
-        El backend solo se detectaba una vez, en __init__: si Ollama
-        arrancaba después de crear CIPA, se quedaba en llama-cpp (o sin
-        backend) para siempre. Aquí se vuelve a comprobar cada vez que se
-        consulta el estado, y se cambia a Ollama en cuanto responde.
+        La elección inicial (Ollama > llama-cpp-python > ninguno) se hace
+        aquí, de forma perezosa, en vez de en __init__. El backend ya
+        elegido solo se re-evalúa para subir a Ollama si arranca más tarde;
+        si ya está en Ollama, o si en la primera resolución no había
+        backend disponible y seguimos sin volver a intentarlo con
+        llama-cpp, no se repite trabajo de más.
         """
+        if not self._backend_resuelto:
+            self._backend_resuelto = True
+            if self._backend_ollama.servidor_disponible():
+                self._backend = self._backend_ollama
+                self._backend_nombre = "ollama"
+            elif self._backend_llama is not None:
+                self._backend = self._backend_llama
+                self._backend_nombre = "llama_cpp"
+            return
+
         if self._backend_nombre == "ollama":
             return
         if self._backend_ollama.servidor_disponible():
@@ -150,6 +160,7 @@ class CIPA:
 
         Devuelve True si tuvo éxito. Lanza ErrorCIPA si algo va mal.
         """
+        self._actualizar_backend()
         if self._backend is None:
             raise ErrorCIPA(MSG_SIN_BACKEND)
 

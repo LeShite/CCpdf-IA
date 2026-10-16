@@ -9,19 +9,20 @@ obligaciones de liberar código.
 
 ## Modelos aprobados
 
-### Phi-3.5-mini-instruct (Microsoft)
-
-- **Licencia**: MIT
-- **Uso**: Limpieza y corrección de texto OCR
-- **Tamaño**: ~3.8B parámetros (~2.4 GB cuantizado a Q4_K_M)
-- **Descarga**: `huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF`
-
 ### Qwen2.5-1.5B-instruct (Alibaba)
 
 - **Licencia**: Apache 2.0
-- **Uso**: Extracción de campos, clasificación, resumen
-- **Tamaño**: ~1.5B parámetros (~1.0 GB cuantizado a Q4_K_M)
-- **Descarga**: `huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF`
+- **Uso**: Limpieza de texto OCR, extracción de campos, clasificación, resumen
+- **Tamaño**: ~1.5B parámetros (~1.0 GB cuantizado)
+- **Descarga**: `ollama pull qwen2.5:1.5b` (runtime preferido: Ollama)
+
+### Phi-3.5-mini-instruct (Microsoft)
+
+- **Licencia**: MIT
+- **Uso**: Limpieza y corrección de texto OCR, como *fallback* cuando Ollama
+  no está disponible (runtime: llama.cpp)
+- **Tamaño**: ~3.8B parámetros (~2.4 GB cuantizado a Q4_K_M)
+- **Descarga**: `huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF`
 
 ## Modelos PROHIBIDOS
 
@@ -34,5 +35,6 @@ obligaciones de liberar código.
 
 ## Runtime
 
-Usamos **llama.cpp** (MIT) a través de `llama-cpp-python` (MIT).
-Corre en CPU sin necesidad de GPU.
+Backend preferido: **Ollama** (MIT), servidor local vía HTTP. Si no está
+disponible, se usa como *fallback* **llama.cpp** (MIT) a través de
+`llama-cpp-python` (MIT). Ambos corren en CPU sin necesidad de GPU.

@@ -83,7 +83,7 @@ MIN_CARACTERES_POR_PAGINA = 20
 MAX_TEXTO_CON_IMAGEN = 80
 
 # Confianza mínima del OCR para incluir una palabra en la capa de texto.
-# 30 = descarta basura (manchas, ruido). Bajo a propósito para no perder datos.
+# 15 = descarta basura (manchas, ruido). Bajo a propósito para no perder datos.
 CONFIANZA_MINIMA = 15
 
 # Capa de texto: 3 = invisible. (Constante para poder cambiarla en pruebas.)

@@ -235,11 +235,23 @@ class VisorPDF(ctk.CTkFrame):
         termino = self.entry_buscar.get().strip()
         if not termino:
             return
-        try:
-            hits = self._doc.buscar(termino)
-        except ErrorVisor as e:
-            messagebox.showwarning("Búsqueda", str(e))
-            return
+
+        # `buscar()` extrae el texto de todas las páginas: en un hilo
+        # separado para no congelar la ventana con PDFs grandes.
+        doc = self._doc
+
+        def tarea():
+            try:
+                hits = doc.buscar(termino)
+            except ErrorVisor as e:
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showwarning("Búsqueda", m))
+                return
+            self.after(0, lambda: self._mostrar_resultado_busqueda(termino, hits))
+
+        threading.Thread(target=tarea, daemon=True).start()
+
+    def _mostrar_resultado_busqueda(self, termino: str, hits: list):
         if not hits:
             messagebox.showinfo("Búsqueda",
                                 f"No se encontró «{termino}» en el documento.")

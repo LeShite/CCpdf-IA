@@ -33,6 +33,8 @@ leer el código.
 | [BUG-019](#bug-019) | 🟡 | Configuración | Carpetas de Divisor/Fusionador, temas e idiomas se guardan pero no se usan |
 | [BUG-020](#bug-020) | ⚪ | Varios | Errores menores y detalles |
 | [BUG-022](#bug-022) | 🟡 | CIPA | ✅ `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa |
+| [BUG-023](#bug-023) | ⚪ | Interfaz | Cierre lento del binario empaquetado |
+| [BUG-024](#bug-024) | ⚪ | Configuración | Sistema de temas desconectado |
 | [DOC-001](#doc-001) | ⚪ | Docs | Documentación desactualizada o incorrecta |
 
 Severidad: 🔴 crítico · 🟠 alto · 🟡 medio · ⚪ bajo
@@ -588,6 +590,40 @@ El `except` solo atrapa `ImportError`, pero la lib nativa lanza
 `(ImportError, OSError, FileNotFoundError)`.
 
 **Pendiente**: mejorar el mensaje de degradación.
+
+---
+
+<a id="bug-023"></a>
+## ⚪ BUG-023 — Cierre lento del binario empaquetado
+
+**Estado**: Pendiente de investigar  
+**Módulo**: `main.py` / `Interfaz/app.py`
+
+El binario empaquetado (PyInstaller) tarda varios segundos en cerrarse tras
+pulsar salir o cerrar la ventana. Probablemente algún hilo daemon (render del
+visor, motor en ejecución, etc.) sigue vivo y retrasa la salida del proceso,
+o el runtime de PyInstaller tarda en desmontar el entorno empaquetado.
+
+Relacionado con la nota de BUG-020 sobre hilos daemon que mueren a mitad de
+escritura al cerrar con un proceso en marcha.
+
+### Pendiente
+
+Reproducir con el binario empaquetado (no se reproduce necesariamente
+ejecutando desde código fuente) y diagnosticar qué mantiene el proceso vivo.
+
+---
+
+<a id="bug-024"></a>
+## ⚪ BUG-024 — Sistema de temas desconectado
+
+**Estado**: Pendiente  
+**Módulo**: `Interfaz/config.py` + `Interfaz/app.py`
+
+Los 6 temas están definidos en `config.py` pero la interfaz usa la paleta
+`P` fija y no tiene sección en Configuración para aplicarlos.
+
+**Pendiente**: conectar la selección de tema en Configuración → Apariencia.
 
 ---
 

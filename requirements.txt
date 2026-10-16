@@ -12,7 +12,3 @@ reportlab>=4.0
 # CIPA — IA local
 llama-cpp-python>=0.3.36
 huggingface-hub>=0.26.0
-
-# CIPA — IA local (descomentar cuando implementemos)
-# llama-cpp-python>=0.3.0
-# huggingface-hub>=0.26.0

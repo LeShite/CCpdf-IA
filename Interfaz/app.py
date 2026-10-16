@@ -61,7 +61,11 @@ from visor_pdf import VisorPDF
 try:
     from Motores.CIPA import AsistenteCIPA
     _HAY_ASISTENTE = True
-except ImportError:
+except Exception:
+    # No solo ImportError: Motores/CIPA/config.py crea carpetas de caché al
+    # importarse (RUTA_CACHE.mkdir()), y un problema de permisos lanza
+    # OSError, no ImportError. Sin este except amplio, eso impedía abrir
+    # la app entera.
     AsistenteCIPA = None
     _HAY_ASISTENTE = False
 
@@ -700,7 +704,7 @@ class CCPdfApp(ctk.CTk):
             ("Modo local",  "100 %",  "sin nube",        P.SUCCESS, "◆"),
             ("Extracción",  "Listo",  "Fuzzy + exacto",  P.ACCENT,  "◈"),
             ("Fusión",      "Listo",  "con marcadores",  P.INFO,    "◇"),
-            ("Módulos",     "7",      "5 activos",       P.WARNING, "◐"),
+            ("Módulos",     "9",      "7 activos",       P.WARNING, "◐"),
         ]
         for i, (etq, val, delta, col, ico) in enumerate(kpis):
             StatCard(stats, etq, val, delta, col, ico).grid(
@@ -1531,19 +1535,36 @@ class CCPdfApp(ctk.CTk):
             f"Añadidos {añadidos} PDF(s) desde {os.path.basename(carpeta)}.")
 
     def _fusion_mover(self, delta):
-        sel = list(self._fusion_listbox.curselection())
+        sel = sorted(self._fusion_listbox.curselection())
         if not sel:
             return
-        indices = sel if delta < 0 else list(reversed(sel))
-        for i in indices:
-            nuevo = i + delta
-            if nuevo < 0 or nuevo >= len(self._lista_fusion):
-                continue
-            self._lista_fusion[i], self._lista_fusion[nuevo] = (
-                self._lista_fusion[nuevo], self._lista_fusion[i])
+        n = len(self._lista_fusion)
+        # Posición final de cada fila seleccionada (por defecto, no se mueve).
+        posiciones = {i: i for i in sel}
+        if delta < 0:
+            # Ascendente: una fila solo se queda quieta si la de arriba
+            # también estaba seleccionada y ya se quedó quieta (o es el
+            # borde). Si no, swap normal. Evita que un bloque seleccionado
+            # pegado al borde se desordene entre sí.
+            limite = -1
+            for i in sel:
+                if i - 1 == limite:
+                    limite = i
+                    continue
+                self._lista_fusion[i], self._lista_fusion[i - 1] = (
+                    self._lista_fusion[i - 1], self._lista_fusion[i])
+                posiciones[i] = i - 1
+        else:
+            limite = n
+            for i in reversed(sel):
+                if i + 1 == limite:
+                    limite = i
+                    continue
+                self._lista_fusion[i], self._lista_fusion[i + 1] = (
+                    self._lista_fusion[i + 1], self._lista_fusion[i])
+                posiciones[i] = i + 1
         self._fusion_refrescar()
-        for i in sel:
-            nuevo = max(0, min(len(self._lista_fusion) - 1, i + delta))
+        for nuevo in posiciones.values():
             self._fusion_listbox.selection_set(nuevo)
 
     def _fusion_quitar(self):
@@ -1555,6 +1576,9 @@ class CCPdfApp(ctk.CTk):
         self._fusion_refrescar()
 
     def _carpeta_base_fusion(self):
+        defecto = self._carpeta_defecto("fusionador")
+        if defecto:
+            return defecto
         return os.path.dirname(self._lista_fusion[0]) if self._lista_fusion else os.getcwd()
 
     def _resolver_salida_fusion(self):
@@ -1812,7 +1836,8 @@ class CCPdfApp(ctk.CTk):
         destino = self._div_destino.get()
         if not destino:
             base = os.path.splitext(os.path.basename(origen))[0]
-            destino = os.path.join(os.path.dirname(origen), f"{base}_unidades")
+            carpeta = self._carpeta_defecto("divisor") or os.path.dirname(origen)
+            destino = os.path.join(carpeta, f"{base}_unidades")
         kwargs = dict(origen=origen, destino=destino, unidades=unidades,
                       callback_confirmar=self._confirmar_desde_hilo)
         self.panel_divisor.escribir_log(f"Salida: {destino}")
