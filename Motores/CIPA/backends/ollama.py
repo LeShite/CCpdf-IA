@@ -45,31 +45,18 @@ class BackendOllama(BackendBase):
 
     # ─── Carga ───
     def cargar(self, ruta_modelo: str, **kwargs) -> bool:
-        """En Ollama no se carga un archivo, se "activa" un modelo por nombre.
-
-        `ruta_modelo` puede ser:
-          - nombre de modelo (ej. "qwen2.5:3b")
-          - o path a un archivo .gguf (en cuyo caso intentamos deducir el nombre)
-
-        Los kwargs relevantes son `temperature`, `top_p`, `max_tokens`, etc.
-        (van al payload de generación, no a la "carga").
-        """
+        """En Ollama no se carga un archivo, se 'activa' un modelo por nombre."""
         # Si es una ruta a archivo, intentamos deducir el nombre del modelo
-        # que se asume ya está registrado en Ollama. No subimos archivos por
-        # ahora (esa función viene después).
         nombre = ruta_modelo
         if "/" in ruta_modelo or "\\" in ruta_modelo or ruta_modelo.endswith(".gguf"):
-            # Es un path. Extraemos el nombre base sin extensión.
             base = ruta_modelo.replace("\\", "/").split("/")[-1]
             base = base.rsplit(".", 1)[0]
-            # Quitamos sufijos típicos
             for sufijo in ("-Q4_K_M", "-Q4_0", "-Q5_K_M", "-Q8_0"):
                 if sufijo in base:
                     base = base.split(sufijo)[0]
                     break
             nombre = base.lower()
 
-        # Verificar que Ollama está corriendo y el modelo existe
         if not self._servidor_activo():
             raise RuntimeError(
                 "Ollama no responde en " + self._host + ". "
@@ -96,9 +83,7 @@ class BackendOllama(BackendBase):
 
     # ─── Descarga ───
     def descargar(self) -> None:
-        """En Ollama, 'descargar' es solo olvidar la referencia.
-        El modelo sigue vivo en el servidor hasta que Ollama decida liberarlo.
-        """
+        """En Ollama, 'descargar' es solo olvidar la referencia."""
         self._modelo = None
         self._params = {}
 
@@ -170,6 +155,41 @@ class BackendOllama(BackendBase):
         except Exception as e:
             raise RuntimeError(f"Error en stream con Ollama: {e}")
 
+    # ─── Chat con tool calling ───
+    def chat_con_tools(
+        self,
+        mensajes: list,
+        tools: list,
+        timeout: int = TIMEOUT_GENERAR,
+    ) -> dict:
+        """Llama a /api/chat con soporte de tool calling.
+
+        `mensajes` es una lista de dicts: [{"role": "user", "content": "..."}]
+        `tools` es la lista de definiciones en formato OpenAI/Ollama.
+
+        Devuelve el dict completo de la respuesta, que puede incluir
+        `message.tool_calls` si el modelo quiere ejecutar herramientas.
+        """
+        if not self.disponible():
+            raise RuntimeError("Modelo no cargado.")
+
+        payload = {
+            "model": self._modelo,
+            "messages": mensajes,
+            "stream": False,
+            "options": {
+                "temperature": self._params.get("temperature", 0.2),
+                "top_p": self._params.get("top_p", 0.9),
+            },
+        }
+        if tools:
+            payload["tools"] = tools
+
+        try:
+            return self._post_json("/api/chat", payload, timeout=timeout)
+        except Exception as e:
+            raise RuntimeError(f"Error en chat con Ollama: {e}")
+
     # ─── Utilidades ───
     def disponible(self) -> bool:
         return self._modelo is not None and self._servidor_activo()
@@ -200,15 +220,10 @@ class BackendOllama(BackendBase):
         return [m.get("name", "") for m in data.get("models", [])]
 
     def _modelo_existe(self, nombre: str) -> bool:
-        """¿Está el modelo descargado en Ollama?
-
-        Ollama usa nombres tipo 'qwen2.5:3b'. Aceptamos tanto el nombre
-        exacto como el nombre sin el tag.
-        """
+        """¿Está el modelo descargado en Ollama?"""
         disponibles = self.listar_modelos()
         if nombre in disponibles:
             return True
-        # Acepta coincidencia por base (qwen2.5:3b == qwen2.5)
         base = nombre.split(":")[0]
         for d in disponibles:
             if d == base or d.startswith(base + ":"):
