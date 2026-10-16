@@ -58,6 +58,14 @@ from dialogo_confirmar import mostrar_dialogo_confirmacion
 from visor_pdf import VisorPDF
 
 
+try:
+    from Motores.CIPA import AsistenteCIPA
+    _HAY_ASISTENTE = True
+except ImportError:
+    AsistenteCIPA = None
+    _HAY_ASISTENTE = False
+
+
 def _try_import(nombre_humano, opciones):
     """Prueba varias sentencias de import y devuelve los símbolos."""
     errores = []
@@ -534,6 +542,12 @@ class CCPdfApp(ctk.CTk):
         self._lista_fusion: list[str] = []
         self._lista_compresion: list[str] = []
 
+        self._lista_ocr: list[str] = []
+
+        # Asistente CIPA (se instancia bajo demanda, no al arrancar)
+        self._asistente = None
+        self._chat_ocupado = False
+
         self._crear_sidebar()
         self._crear_topbar()
         self._crear_area_contenido()
@@ -972,9 +986,66 @@ class CCPdfApp(ctk.CTk):
     #  HELPERS DEL ASISTENTE
     # ═══════════════════════════════════════════════════════════
     def _chat_enviar(self):
-        """Placeholder — se implementa en Fase C2."""
-        messagebox.showinfo("Asistente",
-                            "El chat se conectará con CIPA en la Fase C2.")
+        """Envía el mensaje del usuario al asistente CIPA."""
+        if not _HAY_ASISTENTE:
+            messagebox.showwarning(
+                "Asistente",
+                "El módulo CIPA no está disponible.\n"
+                "Comprueba que exista Motores/CIPA y que Ollama esté activo.")
+            return
+
+        texto = self._chat_entry.get().strip()
+        if not texto:
+            return
+        if self._chat_ocupado:
+            return
+
+        self._chat_append(f"Tú: {texto}\n\n")
+        self._chat_entry.delete(0, "end")
+
+        self._chat_ocupado = True
+        self._btn_chat_enviar.configure(state="disabled", text="Pensando…")
+        self._chat_append("CIPA: pensando…\n\n")
+
+        threading.Thread(target=self._chat_hilo, args=(texto,), daemon=True).start()
+
+    def _chat_hilo(self, texto: str):
+        """Corre en hilo aparte. Llama al asistente y devuelve por after()."""
+        try:
+            if self._asistente is None:
+                self._asistente = AsistenteCIPA()
+            respuesta = self._asistente.enviar(texto)
+        except Exception as e:
+            respuesta = f"[Error: {e}]"
+        self.after(0, lambda: self._chat_mostrar_respuesta(respuesta))
+
+    def _chat_mostrar_respuesta(self, respuesta: str):
+        """Vuelve al hilo UI. Quita el 'pensando…' y muestra la respuesta."""
+        try:
+            contenido = self._chat_historial.get("1.0", "end")
+            pensando = "CIPA: pensando…\n\n"
+            if pensando in contenido:
+                contenido = contenido.replace(pensando, "")
+                self._chat_historial.configure(state="normal")
+                self._chat_historial.delete("1.0", "end")
+                self._chat_historial.insert("1.0", contenido)
+                self._chat_historial.configure(state="disabled")
+        except Exception:
+            pass
+
+        self._chat_append(f"CIPA: {respuesta}\n\n")
+        self._chat_ocupado = False
+        self._btn_chat_enviar.configure(state="normal", text="▶  Enviar")
+
+    def _chat_append(self, texto: str):
+        """Añade texto al chat y hace scroll al final."""
+        try:
+            self._chat_historial.configure(state="normal")
+            self._chat_historial.insert("end", texto)
+            self._chat_historial.see("end")
+            self._chat_historial.configure(state="disabled")
+        except Exception:
+            pass
 
     # ═══════════════════════════════════════════════════════════
     #  ARRANQUE OCR
