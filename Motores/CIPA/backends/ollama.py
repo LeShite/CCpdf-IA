@@ -224,7 +224,13 @@ class BackendOllama(BackendBase):
         disponibles = self.listar_modelos()
         if nombre in disponibles:
             return True
-        base = nombre.split(":")[0]
+        if ":" in nombre:
+            # Se pidió una etiqueta concreta (p. ej. "qwen2.5:3b"): que
+            # exista otra etiqueta del mismo modelo base (p. ej.
+            # "qwen2.5:7b") no cuenta como que este modelo esté instalado.
+            return False
+        # Sin etiqueta → equivale a "<nombre>:latest".
+        base = nombre
         for d in disponibles:
             if d == base or d.startswith(base + ":"):
                 return True

@@ -1712,13 +1712,13 @@ class CCPdfApp(ctk.CTk):
         self._procesando = ejecutando
         estado = "disabled" if ejecutando else "normal"
         for w in (self.btn_run_1, self.btn_run_2, self.btn_run_fusion,
-                  self.btn_run_div, self.btn_run_comp):
+                  self.btn_run_div, self.btn_run_comp, self.btn_run_ocr):
             try:
                 w.configure(state=estado)
             except Exception:
                 pass
         for p in (self.panel_extractor, self.panel_fusion,
-                  self.panel_divisor, self.panel_compresor):
+                  self.panel_divisor, self.panel_compresor, self.panel_ocr):
             p.btn_stop.configure(state="normal" if ejecutando else "disabled")
         for item in self._nav_items.values():
             item.set_habilitado(not ejecutando)
@@ -1853,7 +1853,7 @@ class CCPdfApp(ctk.CTk):
                 callback_log=lambda m: self.cola.put(MsgLog(m)),
                 cancelar=self.evento_cancelar)
             self.cola.put(MsgFin(resumen, None))
-        except (ErrorMotor, ErrorFusion, ErrorDivisor, ErrorCompresion) as e:
+        except (ErrorMotor, ErrorFusion, ErrorDivisor, ErrorCompresion, ErrorOCR) as e:
             self.cola.put(MsgFin(None, str(e)))
         except Exception as e:
             self.cola.put(MsgFin(None, f"Error inesperado: {e}"))

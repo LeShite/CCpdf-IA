@@ -215,6 +215,11 @@ def _matar_proceso(proc) -> None:
 
 
 def _comprimir_gs(gs: str, ruta_in: str, ruta_out: str, cfg: dict, cancelar) -> None:
+    # Ghostscript interpreta "%d" (y cualquier "%X") en -sOutputFile como un
+    # patrón de "una salida por página". Hay que escapar "%" → "%%" en la
+    # ruta de salida o un nombre como "Reporte 100%d.pdf" genera varios
+    # archivos .tmp sueltos en vez de comprimir el PDF.
+    ruta_out_gs = ruta_out.replace("%", "%%")
     cmd = [
         gs, "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5", f"-dPDFSETTINGS={cfg['gs']}",
         "-dNOPAUSE", "-dBATCH", "-dQUIET", "-dSAFER",
@@ -223,7 +228,7 @@ def _comprimir_gs(gs: str, ruta_in: str, ruta_out: str, cfg: dict, cancelar) -> 
         "-dColorImageDownsampleType=/Bicubic", "-dGrayImageDownsampleType=/Bicubic",
         f"-dColorImageResolution={cfg['dpi']}", f"-dGrayImageResolution={cfg['dpi']}",
         f"-dMonoImageResolution={cfg['dpi_mono']}",
-        f"-sOutputFile={ruta_out}", "-f", ruta_in,
+        f"-sOutputFile={ruta_out_gs}", "-f", ruta_in,
     ]
     flags = 0x08000000 if sys.platform.startswith("win") else 0      # sin ventana de consola
     with tempfile.TemporaryFile() as err:                            # archivo, no PIPE: evita bloqueos

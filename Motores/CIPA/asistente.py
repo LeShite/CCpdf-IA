@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
+from .config import MODELOS
 from .nucleo import CIPA, ErrorCIPA
 from .backends.ollama import BackendOllama
 
@@ -303,7 +304,7 @@ class AsistenteCIPA:
 
         # Asegurar que el modelo está cargado en Ollama
         if not self._backend.disponible():
-            self._backend.cargar("qwen2.5:3b")
+            self._backend.cargar(MODELOS["limpieza"]["archivo"])
 
         # ─── Enrutado rápido por reglas ───
         # Casos muy claros que no necesitan pasar por el modelo.

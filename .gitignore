@@ -83,3 +83,4 @@ desktop.ini
 *.pt
 *.pth
 Motores/CIPA/modelos/*.bin
+test claude/

@@ -311,11 +311,15 @@ class VisorPDF(ctk.CTkFrame):
                 img = self._doc.renderizar(pagina_req, zoom=zoom_req)
                 print(f"[VISOR] tarea: render OK → {img.size}")
             except ErrorVisor as e:
-                self.after(0, lambda: messagebox.showerror("Error de render", str(e)))
+                # `e` se borra al salir del except; capturar el mensaje
+                # aquí antes de que la lambda lo use en after().
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showerror("Error de render", m))
                 return
             except Exception as e:
                 print(f"[VISOR] tarea: EXCEPCIÓN → {e!r}")
-                self.after(0, lambda: messagebox.showerror("Error de render", str(e)))
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showerror("Error de render", m))
                 return
             print(f"[VISOR] tarea: llamando after(0, _recibir_render)")
             self.after(0, lambda: self._recibir_render(clave, img))

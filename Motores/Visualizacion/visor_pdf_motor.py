@@ -645,12 +645,14 @@ class DocumentoPDF:
         except Exception as e:
             self._logger(f"[AVISO] Error renderizando página {idx + 1}: {e}")
 
+        # /Rotate en PDF es en sentido HORARIO; Image.ROTATE_* de PIL gira
+        # en sentido ANTIHORARIO, así que hay que usar el ángulo opuesto.
         if rot == 90:
-            img = img_inner.transpose(Image.ROTATE_90)
+            img = img_inner.transpose(Image.ROTATE_270)
         elif rot == 180:
             img = img_inner.transpose(Image.ROTATE_180)
         elif rot == 270:
-            img = img_inner.transpose(Image.ROTATE_270)
+            img = img_inner.transpose(Image.ROTATE_90)
 
         return img
 
@@ -1253,12 +1255,23 @@ class DocumentoPDF:
         if abs(b) > 1e-3 or abs(c) > 1e-3:
             return
 
+        # La imagen se dibuja sobre el cuadrado unidad (0,0)-(1,1); es la
+        # matriz `ctm` la que la escala al tamaño real en puntos. Usar el
+        # ancho/alto en PÍXELES aquí multiplicaba el tamaño por la
+        # resolución de la imagen (p. ej. una imagen de 1000×500 px en un
+        # recuadro de 200×100 pt pedía un resize a 200000×50000 px, ~10
+        # gigapíxeles, y tumbaba el proceso por falta de memoria).
         p0 = _aplicar(ctm, 0, 0)
-        p1 = _aplicar(ctm, w, h)
+        p1 = _aplicar(ctm, 1, 1)
         xmin, xmax = sorted((p0[0], p1[0]))
         ymin, ymax = sorted((p0[1], p1[1]))
         aw = max(1, int(round(abs(xmax - xmin))))
         ah = max(1, int(round(abs(ymax - ymin))))
+
+        if aw * ah > MAX_PIXELES_RENDER:
+            ctx.logger(
+                f"[AVISO] imagen omitida: {aw}x{ah} px excede el límite de render")
+            return
 
         if pil.size != (aw, ah):
             try:
