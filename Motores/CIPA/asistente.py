@@ -253,7 +253,7 @@ class AsistenteCIPA:
     """Chat conversacional con tool calling sobre documentos PDF."""
 
     MAX_TURNOS_HISTORIAL = 10   # últimos N mensajes (user+assistant) que se mantienen
-    MAX_CARACTERES_CONTEXTO = 12000  # límite de texto del PDF que metemos en el prompt
+    MAX_CARACTERES_CONTEXTO = 9000  # límite de texto del PDF que metemos en el prompt
 
     def __init__(self):
         self._cipa = CIPA()
@@ -473,15 +473,14 @@ class AsistenteCIPA:
             return "No hay documento cargado. Llama primero a leer_pdf."
         texto = self._documento_texto[:self.MAX_CARACTERES_CONTEXTO]
         prompt = (
-            "Escribe un resumen detallado del siguiente documento "
-            "(aproximadamente 10 párrafos). "
-            "Incluye: contexto general, emisor, destinatario, propósito, "
-            "cifras relevantes, fechas, y conclusiones. "
+            "Escribe EXACTAMENTE 10 párrafos de resumen del siguiente documento. "
+            "Cada párrafo debe tener 3-4 frases. "
+            "Empieza con contexto general, luego los detalles clave, y termina con conclusión. "
             "No inventes información que no esté en el texto.\n\n"
             "DOCUMENTO:\n---\n" + texto + "\n---\n\nRESUMEN:"
         )
         try:
-            return self._backend.generar(prompt, max_tokens=1500)
+            return self._backend.generar(prompt, max_tokens=1500, temperature=0.1)
         except Exception as e:
             return f"Error al resumir: {e}"
 

@@ -68,3 +68,9 @@ saldrán mal, pero el resto funciona bien.
 - Cuando se abra el PDF en un visor, se ve girada (correcto: es lo que hay).
 - pdf2image la renderiza **tal cual** (sin rotar).
 - El visor del usuario probablemente la ve girada también.
+
+
+
+
+## 🔴 BUG-002 Es necesario usar modificar la ia esta siendo muy pesada y consume muchos tokens 
+se arreglara posterior mente con ia mas pequeña y reduciendo el pront inicial 
