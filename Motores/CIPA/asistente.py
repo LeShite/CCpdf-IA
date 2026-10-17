@@ -164,7 +164,7 @@ REGLAS CRÍTICAS SOBRE RUTAS:
 REGLAS DE RESPUESTA:
 - Responde SIEMPRE en español.
 - Sé claro y directo (2-5 frases para preguntas normales).
-- Para resúmenes: extensión de 10 párrafos.
+- Para resúmenes: 3-5 párrafos.
 - NO inventes datos. Si algo no está en el documento, dilo.
 
 TIENES acceso a herramientas. Úsalas cuando sea necesario."""
@@ -210,7 +210,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "resumir_documento",
-            "description": "Genera un resumen detallado (10 párrafos) del documento cargado. Requiere haber llamado a leer_pdf antes.",
+            "description": "Genera un resumen (3-5 párrafos) del documento cargado. Requiere haber llamado a leer_pdf antes.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -261,6 +261,8 @@ class AsistenteCIPA:
         self._cipa = CIPA()
         self._backend = self._cipa._backend_ollama  # usamos Ollama directo
         self._historial: list = []      # lista de {"role": ..., "content": ...}
+        # Se calcula una vez (BUG-002): lanza 4 subprocesos xdg-user-dir.
+        self._system_prompt = _construir_system_prompt()
         # Estado del documento cargado
         self._documento_texto: str = ""
         self._documento_ruta: str = ""
@@ -323,7 +325,7 @@ class AsistenteCIPA:
         # Bucle de tool calling: máximo 5 iteraciones
         for _ in range(5):
             respuesta = self._backend.chat_con_tools(
-                mensajes=[{"role": "system", "content": _construir_system_prompt()}] + self._historial,
+                mensajes=[{"role": "system", "content": self._system_prompt}] + self._historial,
                 tools=TOOLS,
             )
 
@@ -475,14 +477,14 @@ class AsistenteCIPA:
             return "No hay documento cargado. Llama primero a leer_pdf."
         texto = self._documento_texto[:self.MAX_CARACTERES_CONTEXTO]
         prompt = (
-            "Escribe EXACTAMENTE 10 párrafos de resumen del siguiente documento. "
-            "Cada párrafo debe tener 3-4 frases. "
+            "Escribe un resumen de 3 a 5 párrafos del siguiente documento. "
+            "Cada párrafo debe tener 2-4 frases. "
             "Empieza con contexto general, luego los detalles clave, y termina con conclusión. "
             "No inventes información que no esté en el texto.\n\n"
             "DOCUMENTO:\n---\n" + texto + "\n---\n\nRESUMEN:"
         )
         try:
-            return self._backend.generar(prompt, max_tokens=1500, temperature=0.1)
+            return self._backend.generar(prompt, max_tokens=800, temperature=0.1)
         except Exception as e:
             return f"Error al resumir: {e}"
 

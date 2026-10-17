@@ -22,6 +22,7 @@ Requiere:
 import difflib
 import io
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -95,6 +96,9 @@ ESCALA_H_MAX = 400.0    # % máximo
 # CIPA: una corrección que se parezca menos que esto al original se descarta
 # (protege contra "alucinaciones" del modelo).
 CIPA_SIMILITUD_MINIMA = 0.6
+# CIPA: líneas que se corrigen en una sola llamada al modelo (BUG-002).
+# Las instrucciones del prompt (~240 tokens) se envían una vez por bloque.
+CIPA_LINEAS_POR_LLAMADA = 20
 
 # Preprocesado de imagen antes del OCR.
 # El autocontraste normaliza la iluminación; el median reduce ruido.
@@ -421,7 +425,11 @@ def _aplicar_cipa_por_linea(palabras: list, cipa) -> int:
         que la línea original (así cada palabra conserva su caja).
       - Las palabras que contienen dígitos NUNCA se tocan (folios, importes).
       - Si la corrección se parece poco al original, se descarta.
-      - Solo se usa la primera línea de la respuesta del modelo.
+      - Cada línea de la respuesta se empareja por su número «[N]».
+
+    Las líneas se envían en bloques de CIPA_LINEAS_POR_LLAMADA, numeradas
+    ("[N] texto"), en una sola llamada al modelo; la respuesta se empareja
+    por número. Una línea que falte en la respuesta se deja como estaba.
 
     Devuelve cuántas palabras se modificaron.
     """
@@ -429,33 +437,45 @@ def _aplicar_cipa_por_linea(palabras: list, cipa) -> int:
     for p in palabras:
         lineas.setdefault(p.get("linea"), []).append(p)
 
+    grupos = [g for g in lineas.values()
+              if any(ch.isalpha() for p in g for ch in p["texto"])]
+
     cambios = 0
-    for grupo in lineas.values():
-        originales = [p["texto"] for p in grupo]
-        texto = " ".join(originales)
-        if not any(ch.isalpha() for ch in texto):
-            continue
+    for inicio in range(0, len(grupos), CIPA_LINEAS_POR_LLAMADA):
+        bloque = grupos[inicio:inicio + CIPA_LINEAS_POR_LLAMADA]
+        texto_bloque = "\n".join(
+            f"[{n}] {' '.join(p['texto'] for p in g)}"
+            for n, g in enumerate(bloque, start=1))
 
         try:
-            limpio = cipa.limpiar_texto(texto, contexto="documento escaneado")
+            limpio = cipa.limpiar_texto(texto_bloque, contexto="documento escaneado",
+                                        nombre_prompt="limpieza_ocr_lineas")
         except Exception:
             continue
 
-        respuesta = (limpio or "").strip().splitlines()
-        if not respuesta:
-            continue
-        nuevos = respuesta[0].split()
-        if len(nuevos) != len(originales):
-            continue
-        if difflib.SequenceMatcher(None, texto, " ".join(nuevos)).ratio() < CIPA_SIMILITUD_MINIMA:
-            continue
+        respuesta: dict = {}
+        for linea in (limpio or "").splitlines():
+            m = re.match(r"\s*\[(\d+)\]\s?(.*)$", linea)
+            if m:
+                respuesta.setdefault(int(m.group(1)), m.group(2))
 
-        for p, orig, nuevo in zip(grupo, originales, nuevos):
-            if any(ch.isdigit() for ch in orig):
+        for n, grupo in enumerate(bloque, start=1):
+            if n not in respuesta:
                 continue
-            if nuevo != orig:
-                p["texto"] = nuevo
-                cambios += 1
+            originales = [p["texto"] for p in grupo]
+            texto = " ".join(originales)
+            nuevos = respuesta[n].split()
+            if len(nuevos) != len(originales):
+                continue
+            if difflib.SequenceMatcher(None, texto, " ".join(nuevos)).ratio() < CIPA_SIMILITUD_MINIMA:
+                continue
+
+            for p, orig, nuevo in zip(grupo, originales, nuevos):
+                if any(ch.isdigit() for ch in orig):
+                    continue
+                if nuevo != orig:
+                    p["texto"] = nuevo
+                    cambios += 1
     return cambios
 
 

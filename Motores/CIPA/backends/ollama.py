@@ -13,6 +13,7 @@ Si Ollama no está corriendo, `disponible()` devuelve False y CIPA
 puede caer al backend llama-cpp-python.
 """
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Iterator, Optional
@@ -28,6 +29,16 @@ TIMEOUT_LISTAR = 3
 
 # Timeout para generar. Sin GPU puede tardar, así que amplio.
 TIMEOUT_GENERAR = 600
+
+# Segundos que se reutiliza el resultado de servidor_disponible() (BUG-002):
+# antes cada generar() hacía 2-3 peticiones extra a /api/tags.
+TTL_DISPONIBLE = 5.0
+_cache_disponible: dict = {}   # host → (instante, resultado)
+
+# Ventana de contexto (BUG-002). Ollama usa 2048-4096 por defecto y recorta
+# el prompt por el principio, perdiendo las instrucciones. Debe ser igual en
+# todas las llamadas: si cambia, Ollama recarga el modelo.
+NUM_CTX = 8192
 
 
 class BackendOllama(BackendBase):
@@ -104,6 +115,7 @@ class BackendOllama(BackendBase):
                 "top_k": opciones["top_k"],
                 "repeat_penalty": opciones["repeat_penalty"],
                 "num_predict": opciones["max_tokens"],
+                "num_ctx": NUM_CTX,
             },
         }
 
@@ -128,6 +140,7 @@ class BackendOllama(BackendBase):
                 "temperature": opciones["temperature"],
                 "top_p": opciones["top_p"],
                 "num_predict": opciones["max_tokens"],
+                "num_ctx": NUM_CTX,
             },
         }
 
@@ -180,6 +193,7 @@ class BackendOllama(BackendBase):
             "options": {
                 "temperature": self._params.get("temperature", 0.2),
                 "top_p": self._params.get("top_p", 0.9),
+                "num_ctx": NUM_CTX,
             },
         }
         if tools:
@@ -197,13 +211,22 @@ class BackendOllama(BackendBase):
     # ─── Servidor ───
     @staticmethod
     def servidor_disponible(host: str = OLLAMA_HOST) -> bool:
-        """Comprueba si Ollama responde (útil para autodetectar backend)."""
+        """Comprueba si Ollama responde (útil para autodetectar backend).
+
+        El resultado se cachea TTL_DISPONIBLE segundos por host.
+        """
+        host = host.rstrip("/")
+        cacheado = _cache_disponible.get(host)
+        if cacheado and time.monotonic() - cacheado[0] < TTL_DISPONIBLE:
+            return cacheado[1]
         try:
-            req = urllib.request.Request(host.rstrip("/") + "/api/tags")
+            req = urllib.request.Request(host + "/api/tags")
             with urllib.request.urlopen(req, timeout=TIMEOUT_LISTAR) as resp:
-                return resp.status == 200
+                ok = resp.status == 200
         except Exception:
-            return False
+            ok = False
+        _cache_disponible[host] = (time.monotonic(), ok)
+        return ok
 
     def _servidor_activo(self) -> bool:
         return self.servidor_disponible(self._host)

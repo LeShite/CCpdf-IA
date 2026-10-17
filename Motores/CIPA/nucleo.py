@@ -226,8 +226,12 @@ class CIPA:
     # ═══════════════════════════════════════════════════════════
     #  TAREAS DE ALTO NIVEL
     # ═══════════════════════════════════════════════════════════
-    def limpiar_texto(self, texto: str, contexto: str = "") -> str:
+    def limpiar_texto(self, texto: str, contexto: str = "",
+                      nombre_prompt: str = "limpieza_ocr") -> str:
         """Corrige errores de OCR usando el modelo 'limpieza'.
+
+        `nombre_prompt` es el nombre del archivo en prompts/ (p. ej.
+        "limpieza_ocr_lineas" para bloques de líneas numeradas).
 
         Si CIPA no está disponible, devuelve el texto tal cual
         (comportamiento seguro por defecto).
@@ -237,7 +241,7 @@ class CIPA:
         if not texto.strip():
             return texto
 
-        prompt = self._cargar_prompt("limpieza_ocr").format(
+        prompt = self._cargar_prompt(nombre_prompt).format(
             contexto=contexto or "documento escaneado",
             texto=texto,
         )

@@ -13,7 +13,7 @@ leer el código.
 | ID | Sev. | Módulo | Resumen |
 |---|---|---|---|
 | [BUG-001](#bug-001) | 🔴 | OCR | Auto-rotación: no está conectada y la capa de texto no sabe dibujar texto girado |
-| [BUG-002](#bug-002) | 🔴 | CIPA | La IA es pesada y consume demasiados tokens |
+| [BUG-002](#bug-002) | 🔴 | CIPA | ✅🟡 **PARCIALMENTE RESUELTO** — La IA es pesada y consume demasiados tokens |
 | [BUG-003](#bug-003) | 🔴 | Visor | ✅🟢 **RESUELTO** — Cualquier imagen en el PDF hacía que el visor reventara la RAM |
 | [BUG-004](#bug-004) | 🔴 | CIPA | ✅🟢 **RESUELTO** — `qwen2.5:3b` NO era Apache 2.0 (Qwen Research License, no comercial) |
 | [BUG-005](#bug-005) | 🔴 | Build | Los scripts de build apuntan a un `.spec` que no existe y el ejecutable no lleva los prompts |
@@ -35,6 +35,7 @@ leer el código.
 | [BUG-022](#bug-022) | 🟡 | CIPA | ✅ `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa |
 | [BUG-023](#bug-023) | ⚪ | Interfaz | Cierre lento del binario empaquetado |
 | [BUG-024](#bug-024) | ⚪ | Configuración | Sistema de temas desconectado |
+| [BUG-025](#bug-025) | 🟡 | OCR / CIPA | CIPA reescribe todo el texto (oportunidad de optimización) |
 | [DOC-001](#doc-001) | ⚪ | Docs | Documentación desactualizada o incorrecta |
 
 Severidad: 🔴 crítico · 🟠 alto · 🟡 medio · ⚪ bajo
@@ -135,9 +136,10 @@ dentro de la página salen con poco texto reconocido.
 ---
 
 <a id="bug-002"></a>
-## 🔴 BUG-002 — La IA es muy pesada y consume muchos tokens
+## 🔴 BUG-002 — La IA es muy pesada y consume muchos tokens ✅🟡 PARCIALMENTE RESUELTO
 
-**Estado**: Pendiente  
+**Estado**: ✅ Parcialmente resuelto (2026-10-16). Queda el límite de la
+salida, ver [BUG-025](#bug-025).  
 **Módulo**: `Motores/CIPA/`
 
 ### Descripción original
@@ -180,6 +182,48 @@ Medido con el código actual:
    `xdg-user-dir`. Se puede calcular una vez en `__init__`.
 6. **Modelo**: ver [BUG-004](#bug-004). Si hay que cambiar de modelo por
    licencia, `qwen2.5:1.5b` (Apache 2.0) es más ligero y además legal.
+
+### Aplicado 2026-10-16
+
+1. `pdf_ocr._aplicar_cipa_por_linea` envía las líneas en bloques de 20
+   (`CIPA_LINEAS_POR_LLAMADA`), numeradas `[N] texto`, y empareja la
+   respuesta por número. Se mantienen las validaciones por línea (mismo
+   número de palabras, similitud ≥ 0,6, no tocar palabras con dígitos).
+   Prompt nuevo `Motores/CIPA/prompts/limpieza_ocr_lineas.txt` (con
+   ejemplo: sin él, `qwen2.5:1.5b` quitaba la numeración y unía líneas) y
+   parámetro `nombre_prompt=` en `CIPA.limpiar_texto()`.
+2. `BackendOllama.servidor_disponible()` cachea el resultado 5 s por host
+   (`TTL_DISPONIBLE`).
+3. Resumen de 3–5 párrafos y `max_tokens=800` (prompt del resumen, system
+   prompt y descripción de la tool).
+4. `num_ctx = 8192` (`NUM_CTX`) en `/api/generate` y `/api/chat`, igual en
+   todas las llamadas para que Ollama no recargue el modelo. Comprobado:
+   con el valor por defecto (4096) un prompt de 6000 tokens se recortaba
+   a 2050. Coste: ~200 MB más de RAM (1,2 → 1,4 GB).
+5. El system prompt se calcula una vez en `AsistenteCIPA.__init__` (que
+   ya corre en un hilo aparte).
+
+Medido con `OLI_BMI26_237_2449_17JULIO2026.pdf` (4 páginas escaneadas,
+1091 palabras, `qwen2.5:1.5b` en CPU):
+
+| Qué | Antes | Después | Mejora |
+|---|---|---|---|
+| Llamadas al modelo | 115 | 7 | **16× menos** |
+| Peticiones `/api/tags` | 233 | 8 | **29× menos** |
+| Tokens de entrada | 32 705 | 4 777 | **6,8× menos** |
+| Tokens totales | 37 117 | ~7 500 | **4,9× menos** |
+| Tiempo OCR + CIPA | 224 s | 131–164 s | **1,5× menos** |
+| Cambios de CIPA por PDF | 59 | 5–7 | menos alucinaciones |
+
+- **Tiempo**: el límite ya no está en el código, sino en la CPU generando
+  los ~2700 tokens de salida (el texto reescrito). Ver BUG-025.
+- **Calidad**: de los 59 cambios de antes, muchos eran alucinaciones
+  («Gobierno de CS» → «Gobierno de Colombia», «seguimiento» →
+  «segúnimiento», números duplicados, `**` de markdown). Con bloques
+  quedan 5–7, pero el modelo aún cuela alguno («Programa» → «Programo»);
+  ver BUG-012.
+- **Resumen**: en este PDF no cambia (el modelo ya paraba en ~300 tokens);
+  el beneficio es el techo para documentos largos.
 
 ---
 
@@ -624,6 +668,24 @@ Los 6 temas están definidos en `config.py` pero la interfaz usa la paleta
 `P` fija y no tiene sección en Configuración para aplicarlos.
 
 **Pendiente**: conectar la selección de tema en Configuración → Apariencia.
+
+---
+
+<a id="bug-025"></a>
+## 🟡 BUG-025 — CIPA reescribe todo el texto (oportunidad de optimización)
+
+**Estado**: Pendiente, no urgente  
+**Módulo**: `Motores/OCR/pdf_ocr.py`
+
+Tras [BUG-002](#bug-002), el tiempo de CIPA está dominado por la generación
+de tokens de salida: el modelo devuelve el texto completo reescrito
+(~2700 tokens para un PDF de 4 páginas, ~675 por página). En CPU, esto
+marca el límite.
+
+**Idea**: enviar al modelo SOLO las líneas sospechosas (palabras fuera de
+diccionario, confianza baja de Tesseract, caracteres raros), no todo el
+texto. Debería reducir la salida a ~200–500 tokens por PDF → 5–10× más
+rápido.
 
 ---
 
