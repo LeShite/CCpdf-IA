@@ -293,7 +293,8 @@ class CIPA:
             "\nA continuación",
         ]
         for marcador in marcadores_corte:
-            if marcador in limpio:
+            # Si el original ya lo contiene, es texto del documento, no una explicación
+            if marcador in limpio and marcador not in original:
                 limpio = limpio.split(marcador)[0].strip()
 
         # 3. Verificar que se parece suficientemente al original

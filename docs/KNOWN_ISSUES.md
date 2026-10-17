@@ -32,7 +32,7 @@ leer el código.
 | [BUG-009](#bug-009) | 🟠 | CIPA | 🟡 PARCIAL | Sin Ollama, CIPA nunca funcionaba (el fallback llama.cpp estaba roto) |
 | [BUG-010](#bug-010) | 🟠 | Visor | ✅ RESUELTO | Los mensajes de error del render lanzaban `NameError` |
 | [BUG-011](#bug-011) | 🟠 | Visor | ⏳ PENDIENTE | Al abrir otro PDF puede aparecer una página del PDF anterior |
-| [BUG-012](#bug-012) | 🟡 | CIPA | 🟡 PARCIAL | 🔬 `_postprocesar_correccion` descarta o mutila texto válido |
+| [BUG-012](#bug-012) | 🟡 | CIPA | ✅ RESUELTO | 🔬 `_postprocesar_correccion` descarta o mutila texto válido |
 | [BUG-013](#bug-013) | 🟡 | CIPA | ✅ RESUELTO | `_modelo_existe` daba por instalado un modelo que no lo estaba |
 | [BUG-014](#bug-014) | 🟡 | Asistente | ✅ RESUELTO | 🔬 Los atajos secuestraban peticiones combinadas («lee X y resúmelo») |
 | [BUG-015](#bug-015) | 🟡 | Compresor | ✅ RESUELTO | Nombres con `%` rompían Ghostscript y dejaban basura `.tmp` |
@@ -501,10 +501,10 @@ render con un token de "petición actual", y pasar los resultados por cola.
 ---
 
 <a id="bug-012"></a>
-## 🟡 BUG-012 — `_postprocesar_correccion` descarta o mutila texto válido 🟡 PARCIAL
+## 🟡 BUG-012 — `_postprocesar_correccion` descarta o mutila texto válido ✅ RESUELTO
 
-**Estado**: 🟡 Parcial (commit `ab5d552`)  
-**Módulo**: `Motores/CIPA/nucleo.py` (líneas ~229-255)
+**Estado**: ✅ Resuelto (2026-10-16; parcial en `ab5d552`)  
+**Módulo**: `Motores/CIPA/nucleo.py` (líneas ~256-310)
 
 - El marcador `"A continuación"` va **sin `\n`**: cualquier texto que
   contenga esa frase (muy común en documentos) se corta ahí. Si está al
@@ -531,6 +531,11 @@ Probado con correcciones reales (original con erratas):
 Desde BUG-002, el OCR envía las líneas como `[N] texto` y estos marcadores
 ya no coinciden en ese camino; el fallo sigue en `limpiar_texto()` con
 texto libre.
+
+**Aplicado:** un marcador de corte solo se aplica si **no** aparece ya en
+el original (`nucleo.py`, paso 2). Verificado: `"Oficio de liberacion\nNotas:
+revisr"` → `"Oficio de liberación\nNotas: revisar"`; `"\nCambios …"` a mitad
+de texto se conserva; una `Nota:` añadida por el modelo sigue cortándose.
 
 ---
 
