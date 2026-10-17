@@ -74,7 +74,7 @@ class CIPA:
         """
         if not self._backend_resuelto:
             self._backend_resuelto = True
-            if self._backend_ollama.servidor_disponible():
+            if self._backend_ollama._servidor_activo():
                 self._backend = self._backend_ollama
                 self._backend_nombre = "ollama"
             elif self._backend_llama is not None:
@@ -84,7 +84,7 @@ class CIPA:
 
         if self._backend_nombre == "ollama":
             return
-        if self._backend_ollama.servidor_disponible():
+        if self._backend_ollama._servidor_activo():
             self._backend = self._backend_ollama
             self._backend_nombre = "ollama"
             self._modelo_actual = None
@@ -100,7 +100,7 @@ class CIPA:
 
     def estado(self) -> dict:
         """Devuelve un dict con el estado completo (para la UI)."""
-        ollama_ok = self._backend_ollama.servidor_disponible()
+        ollama_ok = self._backend_ollama._servidor_activo()
         return {
             "backend_instalado": self.backend_instalado(),
             "backend_activo": self._backend_nombre,

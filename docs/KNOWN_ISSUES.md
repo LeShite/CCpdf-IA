@@ -36,7 +36,7 @@ leer el código.
 | [BUG-013](#bug-013) | 🟡 | CIPA | ✅ RESUELTO | `_modelo_existe` daba por instalado un modelo que no lo estaba |
 | [BUG-014](#bug-014) | 🟡 | Asistente | ✅ RESUELTO | 🔬 Los atajos secuestraban peticiones combinadas («lee X y resúmelo») |
 | [BUG-015](#bug-015) | 🟡 | Compresor | ✅ RESUELTO | Nombres con `%` rompían Ghostscript y dejaban basura `.tmp` |
-| [BUG-016](#bug-016) | 🟡 | Asistente | 🟡 PARCIAL | El historial puede quedar corrupto (mensajes `tool` huérfanos) |
+| [BUG-016](#bug-016) | 🟡 | Asistente | ✅ RESUELTO | El historial puede quedar corrupto (mensajes `tool` huérfanos) |
 | [BUG-017](#bug-017) | 🟡 | Visor | ⏳ PENDIENTE | PDFs escaneados y fuentes modernas se ven en blanco o con basura |
 | [BUG-018](#bug-018) | 🟡 | Interfaz | 🟢 APLICADO | Bloqueos de la interfaz por llamadas lentas en el hilo principal |
 | [BUG-019](#bug-019) | 🟡 | Configuración | 🟡 PARCIAL | Carpetas de Divisor/Fusionador, temas e idiomas se guardan pero no se usan |
@@ -445,7 +445,7 @@ Efecto secundario menor: `DATOS DEL` sin `:` en la misma línea ya no corta
 - ✔ `descargar_modelo.py` usa `ollama pull` para los modelos de Ollama, y
   `--listar` pregunta al servidor (probado: marca `✓ listo`).
 - ✔ El backend se re-evalúa: si Ollama arranca más tarde, se pasa a Ollama
-  (probado simulando el servidor caído y luego activo).
+  (probado simulando el servidor caído y luego activo). Se usa `_servidor_activo()` (respeta `self._host`).
 - ✘ `docs/REQUISITOS.md:101` sigue diciendo que el modelo de llama.cpp «se
   descarga automáticamente la primera vez»; el código no lo hace.
 - ✘ `config.py:118` mantiene `# núcleos físicos del OptiPlex`.
@@ -607,9 +607,9 @@ Ghostscript, que ya no lo interpreta como patrón de página.
 ---
 
 <a id="bug-016"></a>
-## 🟡 BUG-016 — El historial del asistente puede quedar corrupto 🟡 PARCIAL
+## 🟡 BUG-016 — El historial del asistente puede quedar corrupto ✅ RESUELTO
 
-**Estado**: 🟡 Parcial (commit `ab5d552`)  
+**Estado**: ✅ Resuelto (2026-10-16; parcial en `ab5d552`)  
 **Módulo**: `Motores/CIPA/asistente.py`
 
 - `_recortar_historial()` corta por número de mensajes sin respetar los
@@ -626,8 +626,8 @@ Ghostscript, que ya no lo interpreta como patrón de página.
 - ✔ `_recortar_historial()` quita los `tool` huérfanos del principio
   (probado con un corte que caía en `tool`).
 - ✔ La constante es ahora `MAX_MENSAJES_HISTORIAL = 10` y guarda 10.
-- ✘ Si el bucle llega a 5 iteraciones, `enviar()` devuelve sin llamar a
-  `_recortar_historial()`. Probado: quedan 11 mensajes, el último `tool`.
+- ✔ (corregido) Si el bucle llega a 5 iteraciones, `enviar()` ya llama a
+  `_recortar_historial()` antes de devolver el fallback.
 
 ---
 

@@ -364,6 +364,7 @@ class AsistenteCIPA:
                 })
 
         # Si llegamos aquí, el modelo no terminó en 5 iteraciones
+        self._recortar_historial()
         return "(El asistente no pudo completar la tarea. Intenta reformular.)"
 
     # ─── Ejecución de herramientas ───
