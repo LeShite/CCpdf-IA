@@ -2,48 +2,57 @@
 
 Registro de bugs pendientes y limitaciones actuales.
 
-Última revisión completa del repositorio: **2026-10-16**. Las entradas
-marcadas con ✅ se reprodujeron con un script de prueba; el resto sale de
+Última revisión completa del repositorio: **2026-10-16** (estados
+reconciliados con el código y los commits el mismo día).
+
+Estados:
+
+- ✅ **RESUELTO** — fix aplicado y verificado.
+- 🟢 **APLICADO** — fix aplicado, sin verificación exhaustiva.
+- 🟡 **PARCIAL** — solo se hizo una parte.
+- ⏳ **PENDIENTE** — falta el fix.
+
+🔬 = el bug original se reprodujo con un script de prueba; el resto sale de
 leer el código.
 
 ---
 
 ## Índice
 
-| ID | Sev. | Módulo | Resumen |
-|---|---|---|---|
-| [BUG-001](#bug-001) | 🔴 | OCR | Auto-rotación: no está conectada y la capa de texto no sabe dibujar texto girado |
-| [BUG-002](#bug-002) | 🔴 | CIPA | ✅🟡 **PARCIALMENTE RESUELTO** — La IA es pesada y consume demasiados tokens |
-| [BUG-003](#bug-003) | 🔴 | Visor | ✅🟢 **RESUELTO** — Cualquier imagen en el PDF hacía que el visor reventara la RAM |
-| [BUG-004](#bug-004) | 🔴 | CIPA | ✅🟢 **RESUELTO** — `qwen2.5:3b` NO era Apache 2.0 (Qwen Research License, no comercial) |
-| [BUG-005](#bug-005) | 🔴 | Build | Los scripts de build apuntan a un `.spec` que no existe y el ejecutable no lleva los prompts |
-| [BUG-006](#bug-006) | 🟠 | Visor | ✅🟢 **RESUELTO** — Páginas con `/Rotate` 90/270 se mostraban giradas 180° |
-| [BUG-007](#bug-007) | 🟠 | Interfaz / OCR | ✅🟢 **RESUELTO** — El OCR no se podía detener (el botón nunca se habilitaba) |
-| [BUG-008](#bug-008) | 🟠 | Divisor | ✅ Unidades con «CIUDAD» en el nombre se cortan |
-| [BUG-009](#bug-009) | 🟠 | CIPA | Sin Ollama, CIPA nunca funciona (el fallback llama.cpp está roto) |
-| [BUG-010](#bug-010) | 🟠 | Visor | ✅🟢 **RESUELTO** — Los mensajes de error del render lanzaban `NameError` |
-| [BUG-011](#bug-011) | 🟠 | Visor | Al abrir otro PDF puede aparecer una página del PDF anterior |
-| [BUG-012](#bug-012) | 🟡 | CIPA | ✅ `_postprocesar_correccion` descarta o mutila texto válido |
-| [BUG-013](#bug-013) | 🟡 | CIPA | ✅🟢 **RESUELTO** — `_modelo_existe` daba por instalado un modelo que no lo estaba |
-| [BUG-014](#bug-014) | 🟡 | Asistente | ✅ Los atajos secuestran peticiones combinadas («lee X y resúmelo») |
-| [BUG-015](#bug-015) | 🟡 | Compresor | ✅🟢 **RESUELTO** — Nombres con `%` rompían Ghostscript y dejaban basura `.tmp` |
-| [BUG-016](#bug-016) | 🟡 | Asistente | El historial puede quedar corrupto (mensajes `tool` huérfanos) |
-| [BUG-017](#bug-017) | 🟡 | Visor | PDFs escaneados y fuentes modernas se ven en blanco o con basura |
-| [BUG-018](#bug-018) | 🟡 | Interfaz | Bloqueos de la interfaz por llamadas lentas en el hilo principal |
-| [BUG-019](#bug-019) | 🟡 | Configuración | Carpetas de Divisor/Fusionador, temas e idiomas se guardan pero no se usan |
-| [BUG-020](#bug-020) | ⚪ | Varios | Errores menores y detalles |
-| [BUG-022](#bug-022) | 🟡 | CIPA | ✅ `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa |
-| [BUG-023](#bug-023) | ⚪ | Interfaz | Cierre lento del binario empaquetado |
-| [BUG-024](#bug-024) | ⚪ | Configuración | Sistema de temas desconectado |
-| [BUG-025](#bug-025) | 🟡 | OCR / CIPA | CIPA reescribe todo el texto (oportunidad de optimización) |
-| [DOC-001](#doc-001) | ⚪ | Docs | Documentación desactualizada o incorrecta |
+| ID | Sev. | Módulo | Estado | Resumen |
+|---|---|---|---|---|
+| [BUG-001](#bug-001) | 🔴 | OCR | ⏳ PENDIENTE | Auto-rotación: no está conectada y la capa de texto no sabe dibujar texto girado |
+| [BUG-002](#bug-002) | 🔴 | CIPA | 🟡 PARCIAL | La IA es pesada y consume demasiados tokens |
+| [BUG-003](#bug-003) | 🔴 | Visor | ✅ RESUELTO | Cualquier imagen en el PDF hacía que el visor reventara la RAM |
+| [BUG-004](#bug-004) | 🔴 | CIPA | ✅ RESUELTO | `qwen2.5:3b` NO era Apache 2.0 (Qwen Research License, no comercial) |
+| [BUG-005](#bug-005) | 🔴 | Build | 🟢 APLICADO | Los scripts de build apuntaban a un `.spec` que no existe y el ejecutable no llevaba los prompts |
+| [BUG-006](#bug-006) | 🟠 | Visor | ✅ RESUELTO | Páginas con `/Rotate` 90/270 se mostraban giradas 180° |
+| [BUG-007](#bug-007) | 🟠 | Interfaz / OCR | ✅ RESUELTO | El OCR no se podía detener (el botón nunca se habilitaba) |
+| [BUG-008](#bug-008) | 🟠 | Divisor | ✅ RESUELTO | 🔬 Unidades con «CIUDAD» en el nombre se cortaban |
+| [BUG-009](#bug-009) | 🟠 | CIPA | 🟡 PARCIAL | Sin Ollama, CIPA nunca funcionaba (el fallback llama.cpp estaba roto) |
+| [BUG-010](#bug-010) | 🟠 | Visor | ✅ RESUELTO | Los mensajes de error del render lanzaban `NameError` |
+| [BUG-011](#bug-011) | 🟠 | Visor | ⏳ PENDIENTE | Al abrir otro PDF puede aparecer una página del PDF anterior |
+| [BUG-012](#bug-012) | 🟡 | CIPA | 🟡 PARCIAL | 🔬 `_postprocesar_correccion` descarta o mutila texto válido |
+| [BUG-013](#bug-013) | 🟡 | CIPA | ✅ RESUELTO | `_modelo_existe` daba por instalado un modelo que no lo estaba |
+| [BUG-014](#bug-014) | 🟡 | Asistente | ✅ RESUELTO | 🔬 Los atajos secuestraban peticiones combinadas («lee X y resúmelo») |
+| [BUG-015](#bug-015) | 🟡 | Compresor | ✅ RESUELTO | Nombres con `%` rompían Ghostscript y dejaban basura `.tmp` |
+| [BUG-016](#bug-016) | 🟡 | Asistente | 🟡 PARCIAL | El historial puede quedar corrupto (mensajes `tool` huérfanos) |
+| [BUG-017](#bug-017) | 🟡 | Visor | ⏳ PENDIENTE | PDFs escaneados y fuentes modernas se ven en blanco o con basura |
+| [BUG-018](#bug-018) | 🟡 | Interfaz | 🟢 APLICADO | Bloqueos de la interfaz por llamadas lentas en el hilo principal |
+| [BUG-019](#bug-019) | 🟡 | Configuración | 🟡 PARCIAL | Carpetas de Divisor/Fusionador, temas e idiomas se guardan pero no se usan |
+| [BUG-020](#bug-020) | ⚪ | Varios | 🟡 PARCIAL | Errores menores y detalles |
+| [BUG-022](#bug-022) | 🟡 | CIPA | 🟡 PARCIAL | 🔬 `llama_cpp` crasheaba con `FileNotFoundError` si falta la lib nativa |
+| [BUG-023](#bug-023) | ⚪ | Interfaz | ⏳ PENDIENTE | Cierre lento del binario empaquetado |
+| [BUG-024](#bug-024) | ⚪ | Configuración | ⏳ PENDIENTE | Sistema de temas desconectado |
+| [BUG-025](#bug-025) | 🟡 | OCR / CIPA | ⏳ PENDIENTE | CIPA reescribe todo el texto (oportunidad de optimización) |
+| [DOC-001](#doc-001) | ⚪ | Docs | 🟡 PARCIAL | Documentación desactualizada o incorrecta |
 
 Severidad: 🔴 crítico · 🟠 alto · 🟡 medio · ⚪ bajo
 
 ---
 
 <a id="bug-001"></a>
-## 🔴 BUG-001 — Auto-rotación no funciona correctamente
+## 🔴 BUG-001 — Auto-rotación no funciona correctamente ⏳ PENDIENTE
 
 **Estado**: Pendiente (diagnóstico actualizado el 2026-10-16)  
 **Fecha apertura**: 2026-10-15  
@@ -136,9 +145,9 @@ dentro de la página salen con poco texto reconocido.
 ---
 
 <a id="bug-002"></a>
-## 🔴 BUG-002 — La IA es muy pesada y consume muchos tokens ✅🟡 PARCIALMENTE RESUELTO
+## 🔴 BUG-002 — La IA es muy pesada y consume muchos tokens 🟡 PARCIAL
 
-**Estado**: ✅ Parcialmente resuelto (2026-10-16). Queda el límite de la
+**Estado**: 🟡 Parcial (2026-10-16). Queda el límite de la
 salida, ver [BUG-025](#bug-025).  
 **Módulo**: `Motores/CIPA/`
 
@@ -228,7 +237,7 @@ Medido con `OLI_BMI26_237_2449_17JULIO2026.pdf` (4 páginas escaneadas,
 ---
 
 <a id="bug-003"></a>
-## 🔴 BUG-003 — El visor revienta la RAM con cualquier imagen ✅🟢 RESUELTO
+## 🔴 BUG-003 — El visor revienta la RAM con cualquier imagen ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `Motores/Visualizacion/visor_pdf_motor.py` → `_imagen()` (líneas ~1256-1265)
@@ -256,7 +265,7 @@ un resize de 200000×50000 px, ahora calcula 200×100 px correctamente.
 ---
 
 <a id="bug-004"></a>
-## 🔴 BUG-004 — `qwen2.5:3b` no es Apache 2.0 ✅🟢 RESUELTO
+## 🔴 BUG-004 — `qwen2.5:3b` no es Apache 2.0 ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulos**: `Motores/CIPA/config.py` (claves `limpieza` y `extraccion`),
@@ -284,8 +293,9 @@ qwen2.5:1.5b` y el tamaño/licencia del modelo).
 ---
 
 <a id="bug-005"></a>
-## 🔴 BUG-005 — El empaquetado no funciona
+## 🔴 BUG-005 — El empaquetado no funciona 🟢 APLICADO
 
+**Estado**: 🟢 Aplicado (commit `759590d`), verificado solo en Linux  
 **Módulos**: `build_linux.sh`, `build_windows.bat`, `ccpdf_ia.spec`
 
 1. Los dos scripts ejecutan `PyInstaller ccpdf.spec`, pero el archivo se
@@ -299,10 +309,23 @@ qwen2.5:1.5b` y el tamaño/licencia del modelo).
    `app.py`, y PyInstaller no ve esos imports.
 4. El nombre del ejecutable sigue siendo `CCpdf`, no `CCpdf IA`.
 
+### Verificación 2026-10-16
+
+- ✔ `build_linux.sh` y `build_windows.bat` ejecutan `ccpdf_ia.spec`.
+- ✔ El `.spec` añade todos los `.txt` de `Motores/CIPA/prompts/`,
+  `hiddenimports` incluye `pytesseract`, `pdf2image`, `reportlab`, `thefuzz`
+  y `Motores.*`, y `name="CCpdf IA"`. `llama_cpp` se excluye a propósito
+  (BUG-022) en vez de añadirse.
+- ✔ Inspeccionado `dist/CCpdf IA` con `pyi-archive_viewer`: lleva
+  `limpieza_ocr.txt` y los 4 módulos ocultos.
+- ✘ No probado: build en Windows, ni arrancar el binario.
+- ⚠ El binario actual es anterior a BUG-002 y no lleva
+  `limpieza_ocr_lineas.txt`: hay que recompilar (el `.spec` ya lo recoge).
+
 ---
 
 <a id="bug-006"></a>
-## 🟠 BUG-006 — El visor gira mal las páginas con /Rotate ✅🟢 RESUELTO
+## 🟠 BUG-006 — El visor gira mal las páginas con /Rotate ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `visor_pdf_motor.py` → `renderizar()` (líneas ~648-653)
@@ -329,7 +352,7 @@ igual que Poppler.
 ---
 
 <a id="bug-007"></a>
-## 🟠 BUG-007 — El OCR no se puede detener ✅🟢 RESUELTO
+## 🟠 BUG-007 — El OCR no se puede detener ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `Interfaz/app.py` → `_set_ejecutando()` (línea ~1711)
@@ -353,8 +376,9 @@ inesperado".
 ---
 
 <a id="bug-008"></a>
-## 🟠 BUG-008 — El divisor corta las unidades que contienen «CIUDAD» ✅
+## 🟠 BUG-008 — El divisor corta las unidades que contienen «CIUDAD» ✅ RESUELTO
 
+**Estado**: ✅ Resuelto (commit `ab5d552`)  
 **Módulo**: `Motores/Division/pdf_divisor.py` → `_RE_UNIDAD` (línea ~120)
 
 La expresión regular deja de leer el valor en cuanto ve `CIUDAD`, `MARCA`,
@@ -374,11 +398,25 @@ después de extraer el valor.
 corte vayan seguidas de `:` (`CIUDAD\s*:`), que es como aparecen como
 nombre de campo.
 
+### Verificación 2026-10-16
+
+`_RE_UNIDAD` corta en `\n` o en `CIUDAD:`, `MARCA:`, etc. (con `:`).
+Probado con `extraer_unidad_pagina`/`_RE_UNIDAD`:
+
+- `"HGZ 6 CIUDAD JUAREZ CHIHUAHUA"` → completo ✔
+- `"HGZ 6 CIUDAD DELICIAS\nMARCA: X"` → `HGZ 6 CIUDAD DELICIAS` ✔
+- `"UMF 12 CIUDAD: SALTILLO"` → `UMF 12` ✔
+- `"HGR 1 MARCA: ACME MODELO: Z"` → `HGR 1` ✔
+
+Efecto secundario menor: `DATOS DEL` sin `:` en la misma línea ya no corta
+(`"HGZ 2 DATOS DEL EQUIPO"` → valor completo).
+
 ---
 
 <a id="bug-009"></a>
-## 🟠 BUG-009 — Sin Ollama, CIPA nunca funciona
+## 🟠 BUG-009 — Sin Ollama, CIPA nunca funciona 🟡 PARCIAL
 
+**Estado**: 🟡 Parcial (commit `ab5d552`)  
 **Módulos**: `Motores/CIPA/nucleo.py`, `config.py`, `descargar_modelo.py`
 
 - `aplicar_ocr` siempre carga la clave `"limpieza"`, que es un modelo de
@@ -400,10 +438,25 @@ nombre de campo.
   Se ignora en la carga, que usa `os.cpu_count()`, pero el comentario
   confunde.
 
+### Verificación 2026-10-16
+
+- ✔ Sin Ollama, `cargar_modelo("limpieza")` usa `limpieza_llama_cpp`
+  (probado: carga Phi-3.5).
+- ✔ `descargar_modelo.py` usa `ollama pull` para los modelos de Ollama, y
+  `--listar` pregunta al servidor (probado: marca `✓ listo`).
+- ✔ El backend se re-evalúa: si Ollama arranca más tarde, se pasa a Ollama
+  (probado simulando el servidor caído y luego activo).
+- ✘ `docs/REQUISITOS.md:101` sigue diciendo que el modelo de llama.cpp «se
+  descarga automáticamente la primera vez»; el código no lo hace.
+- ✘ `config.py:118` mantiene `# núcleos físicos del OptiPlex`.
+- ⚠ Nuevo: `_actualizar_backend()` llama a `servidor_disponible()` sin
+  pasarle `self._host`, así que siempre consulta `127.0.0.1:11434` aunque
+  `BackendOllama` se cree con otro host.
+
 ---
 
 <a id="bug-010"></a>
-## 🟠 BUG-010 — Los errores del render del visor lanzan NameError ✅🟢 RESUELTO
+## 🟠 BUG-010 — Los errores del render del visor lanzan NameError ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `Interfaz/visor_pdf.py` → `_render()` (líneas ~314 y ~318)
@@ -427,7 +480,7 @@ la referencia tardía a `e`.
 ---
 
 <a id="bug-011"></a>
-## 🟠 BUG-011 — El visor puede mostrar una página del PDF anterior
+## 🟠 BUG-011 — El visor puede mostrar una página del PDF anterior ⏳ PENDIENTE
 
 **Módulo**: `Interfaz/visor_pdf.py` → `_render()` / `_recibir_render()`
 
@@ -448,8 +501,9 @@ render con un token de "petición actual", y pasar los resultados por cola.
 ---
 
 <a id="bug-012"></a>
-## 🟡 BUG-012 — `_postprocesar_correccion` descarta o mutila texto válido ✅
+## 🟡 BUG-012 — `_postprocesar_correccion` descarta o mutila texto válido 🟡 PARCIAL
 
+**Estado**: 🟡 Parcial (commit `ab5d552`)  
 **Módulo**: `Motores/CIPA/nucleo.py` (líneas ~229-255)
 
 - El marcador `"A continuación"` va **sin `\n`**: cualquier texto que
@@ -463,10 +517,25 @@ render con un token de "petición actual", y pasar los resultados por cola.
   `"- Monitor\n- Teclado"` pasa a `"Monitor\n- Teclado"`, y el cambio se
   **acepta** porque la similitud sigue siendo alta.
 
+### Verificación 2026-10-16
+
+Probado con correcciones reales (original con erratas):
+
+- ✔ `"A continuacion se detalan…"` (al principio) → corrección aceptada.
+- ✔ `"- Monitr\n- Teclado"` → viñeta conservada.
+- ✘ `"…\nCambios …"`, `"…\nCorrecciones …"` y `"…\nA continuacion …"` (a
+  mitad de texto) → corrección **descartada**.
+- ✘ `"Oficio de liberacion\nNotas: revisr"` → se **acepta** el texto
+  recortado `"Oficio de liberación"`: se pierde una línea.
+
+Desde BUG-002, el OCR envía las líneas como `[N] texto` y estos marcadores
+ya no coinciden en ese camino; el fallo sigue en `limpiar_texto()` con
+texto libre.
+
 ---
 
 <a id="bug-013"></a>
-## 🟡 BUG-013 — `_modelo_existe` da falsos positivos ✅🟢 RESUELTO
+## 🟡 BUG-013 — `_modelo_existe` da falsos positivos ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `Motores/CIPA/backends/ollama.py` (líneas ~222-231)
@@ -489,8 +558,9 @@ usa cuando no se pide etiqueta. Verificado: con `qwen2.5:7b` instalado,
 ---
 
 <a id="bug-014"></a>
-## 🟡 BUG-014 — Los atajos del asistente secuestran peticiones ✅
+## 🟡 BUG-014 — Los atajos del asistente secuestran peticiones ✅ RESUELTO
 
+**Estado**: ✅ Resuelto (commit `ab5d552`)  
 **Módulo**: `Motores/CIPA/asistente.py` → `_detectar_atajo()` (líneas ~521-545)
 
 - "lee el PDF informe.pdf y hazme un resumen" contiene "resumen", así que
@@ -501,10 +571,17 @@ usa cuando no se pide etiqueta. Verificado: con `qwen2.5:7b` instalado,
 - Los atajos solo deberían activarse si **ya hay un documento cargado** y
   el mensaje no menciona una ruta o un `.pdf`.
 
+### Verificación 2026-10-16
+
+Probado `_detectar_atajo()`: sin documento cargado nunca hay atajo; con
+documento, `"lee el PDF informe.pdf y hazme un resumen"`, `"léelo
+resumidamente"`, `"presume de algo"` y `"resume ~/Escritorio/x"` → sin
+atajo ✔; `"dame un resumen"` → atajo ✔.
+
 ---
 
 <a id="bug-015"></a>
-## 🟡 BUG-015 — Nombres con `%` rompen Ghostscript ✅🟢 RESUELTO
+## 🟡 BUG-015 — Nombres con `%` rompen Ghostscript ✅ RESUELTO
 
 **Estado**: ✅ Resuelto (2026-10-16)
 **Módulo**: `Motores/Compresion/pdf_compresor.py` → `_comprimir_gs()` (línea ~226)
@@ -525,8 +602,9 @@ Ghostscript, que ya no lo interpreta como patrón de página.
 ---
 
 <a id="bug-016"></a>
-## 🟡 BUG-016 — El historial del asistente puede quedar corrupto
+## 🟡 BUG-016 — El historial del asistente puede quedar corrupto 🟡 PARCIAL
 
+**Estado**: 🟡 Parcial (commit `ab5d552`)  
 **Módulo**: `Motores/CIPA/asistente.py`
 
 - `_recortar_historial()` corta por número de mensajes sin respetar los
@@ -538,10 +616,18 @@ Ghostscript, que ya no lo interpreta como patrón de página.
 - `MAX_TURNOS_HISTORIAL = 10` dice "últimos N mensajes", pero en realidad
   guarda 20.
 
+### Verificación 2026-10-16
+
+- ✔ `_recortar_historial()` quita los `tool` huérfanos del principio
+  (probado con un corte que caía en `tool`).
+- ✔ La constante es ahora `MAX_MENSAJES_HISTORIAL = 10` y guarda 10.
+- ✘ Si el bucle llega a 5 iteraciones, `enviar()` devuelve sin llamar a
+  `_recortar_historial()`. Probado: quedan 11 mensajes, el último `tool`.
+
 ---
 
 <a id="bug-017"></a>
-## 🟡 BUG-017 — El visor no muestra bien escaneos ni fuentes modernas
+## 🟡 BUG-017 — El visor no muestra bien escaneos ni fuentes modernas ⏳ PENDIENTE
 
 **Módulo**: `visor_pdf_motor.py` (limitaciones del motor propio)
 
@@ -564,7 +650,9 @@ visor y dejar el motor propio como respaldo.
 ---
 
 <a id="bug-018"></a>
-## 🟡 BUG-018 — Bloqueos de la interfaz
+## 🟡 BUG-018 — Bloqueos de la interfaz 🟢 APLICADO
+
+**Estado**: 🟢 Aplicado (commit `4bd88db`)
 
 - `CIPA()` hace una petición HTTP con 3 s de timeout en el constructor. Hoy
   se llama desde hilos, pero cualquier uso en el hilo principal congela la
@@ -576,11 +664,21 @@ visor y dejar el motor propio como respaldo.
   `RUTA_CACHE.mkdir()` (permisos), lanza una excepción que no es
   `ImportError` y **la app no abre**.
 
+### Verificación 2026-10-16
+
+- ✔ `CIPA()` ya no hace peticiones en el constructor (medido: 0,000 s).
+- 🟢 `VisorPDF._buscar` lanza `doc.buscar()` en un hilo. No probado en la
+  interfaz; además el resultado vuelve con `self.after()` desde el hilo,
+  el mismo patrón que señala BUG-011.
+- 🟢 `app.py` importa `Motores.CIPA` con `except Exception`. No probado
+  forzando el fallo de `mkdir`.
+
 ---
 
 <a id="bug-019"></a>
-## 🟡 BUG-019 — Opciones de configuración que no hacen nada
+## 🟡 BUG-019 — Opciones de configuración que no hacen nada 🟡 PARCIAL
 
+**Estado**: 🟡 Parcial (commit `4bd88db`)  
 **Módulos**: `Interfaz/app.py`, `Interfaz/config.py`
 
 - En Configuración → Carpetas se pueden guardar carpetas para **Divisor** y
@@ -591,10 +689,21 @@ visor y dejar el motor propio como respaldo.
   fija `P` y casi todos los textos están escritos en el código. No hay
   pestaña de Apariencia.
 
+### Verificación 2026-10-16
+
+- ✔ `_carpeta_base_fusion` y `_iniciar_division` usan
+  `_carpeta_defecto("fusionador")` / `("divisor")` (leído en el código, no
+  probado en la interfaz).
+- ✘ Temas: siguen sin conectarse (ver [BUG-024](#bug-024)). El commit dice
+  «temas recuperados», pero `app.py` no usa `TEMAS` ni `tema()`.
+- ✘ Idiomas: `IDIOMAS` tampoco se usa en `app.py`.
+
 ---
 
 <a id="bug-020"></a>
-## ⚪ BUG-020 — Errores menores
+## ⚪ BUG-020 — Errores menores 🟡 PARCIAL
+
+**Estado**: 🟡 Parcial (commit `4bd88db`)
 
 - **Fusionar → mover arriba/abajo** con varias filas seleccionadas en el
   borde (p. ej. filas 0 y 1 hacia arriba) desordena la lista: la fila 1 se
@@ -620,11 +729,29 @@ visor y dejar el motor propio como respaldo.
 - Al cerrar la app con un proceso en marcha, el hilo daemon muere a mitad
   de escritura y pueden quedar archivos `.tmp`.
 
+### Verificación 2026-10-16
+
+- ✔ Fusionar → mover: probado `_fusion_mover` con filas `[0,1]↑`, `[1,2]↑`,
+  `[2,3]↓`, `[0,2]↓` y `[0,3]↑`; orden y selección correctos.
+- ✔ Actualizador: `REPO = "LeShite/CCpdf-IA"`.
+- ✔ Ghostscript en Windows: se ordena por versión numérica
+  (`_clave_version_gs`). No probado en Windows.
+- ✔ Dashboard: «9 / 7 activos».
+- ✘ Compresor: sigue usando `obj._data` (`pdf_compresor.py:299`).
+- ✘ Imports duplicados: siguen el `sys.path.insert` y el `exec()` de
+  `_try_import` en `app.py`.
+- ✘ Asistente: el system prompt sigue sin explicar cómo se usa cada módulo.
+- ✘ Fuentes: siguen `Segoe UI` y `Consolas` fijas.
+- ✘ Cierre con proceso en marcha: `_al_cerrar` activa la cancelación pero
+  no espera al hilo antes de `destroy()`.
+
 ---
 
 <a id="bug-022"></a>
-## 🟡 BUG-022 — `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa ✅
+## 🟡 BUG-022 — `llama_cpp` crashea con `FileNotFoundError` si falta la lib nativa 🟡 PARCIAL
 
+**Estado**: 🟡 Parcial (commit `759590d`): el crash está resuelto; falta el
+aviso al usuario  
 **Módulo**: `Motores/CIPA/backends/llama_cpp.py`
 
 El `except` solo atrapa `ImportError`, pero la lib nativa lanza
@@ -635,12 +762,18 @@ El `except` solo atrapa `ImportError`, pero la lib nativa lanza
 
 **Pendiente**: mejorar el mensaje de degradación.
 
+### Verificación 2026-10-16
+
+- ✔ Simulado un `FileNotFoundError` al importar `llama_cpp`: el módulo
+  carga con `HAY_LLAMA_CPP = False` y CIPA sigue funcionando con Ollama.
+- ✘ La degradación es silenciosa: no se registra ni se muestra ningún aviso.
+
 ---
 
 <a id="bug-023"></a>
-## ⚪ BUG-023 — Cierre lento del binario empaquetado
+## ⚪ BUG-023 — Cierre lento del binario empaquetado ⏳ PENDIENTE
 
-**Estado**: Pendiente de investigar  
+**Estado**: ⏳ Pendiente de investigar (el commit `4bd88db` solo lo documentó)  
 **Módulo**: `main.py` / `Interfaz/app.py`
 
 El binario empaquetado (PyInstaller) tarda varios segundos en cerrarse tras
@@ -659,9 +792,9 @@ ejecutando desde código fuente) y diagnosticar qué mantiene el proceso vivo.
 ---
 
 <a id="bug-024"></a>
-## ⚪ BUG-024 — Sistema de temas desconectado
+## ⚪ BUG-024 — Sistema de temas desconectado ⏳ PENDIENTE
 
-**Estado**: Pendiente  
+**Estado**: ⏳ Pendiente (el commit `4bd88db` solo lo documentó)  
 **Módulo**: `Interfaz/config.py` + `Interfaz/app.py`
 
 Los 6 temas están definidos en `config.py` pero la interfaz usa la paleta
@@ -672,9 +805,9 @@ Los 6 temas están definidos en `config.py` pero la interfaz usa la paleta
 ---
 
 <a id="bug-025"></a>
-## 🟡 BUG-025 — CIPA reescribe todo el texto (oportunidad de optimización)
+## 🟡 BUG-025 — CIPA reescribe todo el texto (oportunidad de optimización) ⏳ PENDIENTE
 
-**Estado**: Pendiente, no urgente  
+**Estado**: ⏳ Pendiente, no urgente  
 **Módulo**: `Motores/OCR/pdf_ocr.py`
 
 Tras [BUG-002](#bug-002), el tiempo de CIPA está dominado por la generación
@@ -690,7 +823,9 @@ rápido.
 ---
 
 <a id="doc-001"></a>
-## ⚪ DOC-001 — Documentación desactualizada
+## ⚪ DOC-001 — Documentación desactualizada 🟡 PARCIAL
+
+**Estado**: 🟡 Parcial (commit `4bd88db`)
 
 - `README.md` dice que el OCR usa "Tesseract + IA", pero la IA solo actúa si
   se marca "Usar CIPA" y sufre BUG-002/BUG-009.
@@ -706,3 +841,15 @@ rápido.
   valor es 15.
 - `.gitignore` ignora `*.pdf`, así que los PDFs de prueba de BUG-001 no
   pueden versionarse sin la excepción `!tests/samples/*.pdf`.
+
+### Verificación 2026-10-16
+
+- ✔ `README.md`: el OCR aparece como Tesseract + CIPA opcional.
+- ✔ `Motores/CIPA/README.md` y `MODELOS.md`: Qwen2.5-1.5B vía Ollama y
+  Phi-3.5 vía llama.cpp como fallback.
+- ✔ `REQUISITOS.md`: licencia de Qwen correcta (BUG-004).
+- ✘ `REQUISITOS.md:101`: sigue la «descarga automática» (BUG-009).
+- 🟡 `requirements.txt`: se quitó el bloque duplicado, pero
+  `huggingface-hub` sigue listado y no se importa en ningún sitio.
+- ✔ `pdf_ocr.py`: el comentario de `CONFIANZA_MINIMA` dice 15.
+- ✘ `.gitignore`: `!tests/samples/*.pdf` sigue comentado.
